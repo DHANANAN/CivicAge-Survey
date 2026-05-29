@@ -1,4 +1,4 @@
-package com.dhananan.civicage.ui.theme
+package com.nlud.civilagesurvey.ui.theme
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle

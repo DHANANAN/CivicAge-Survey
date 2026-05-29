@@ -1,4 +1,4 @@
-package com.dhananan.civicage.data.model
+package com.nlud.civilagesurvey.data.model
 
 import com.example.data.database.FormQuestionEntity
 

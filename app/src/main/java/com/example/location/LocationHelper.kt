@@ -1,4 +1,4 @@
-package com.dhananan.civicage.location
+package com.nlud.civilagesurvey.location
 
 import android.annotation.SuppressLint
 import android.content.Context

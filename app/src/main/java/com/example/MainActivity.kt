@@ -1,4 +1,4 @@
-package com.dhananan.civicage
+package com.nlud.civilagesurvey
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity

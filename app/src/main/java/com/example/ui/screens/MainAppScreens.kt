@@ -1,4 +1,4 @@
-package com.dhananan.civicage.ui.screens
+package com.nlud.civilagesurvey.ui.screens
 
 import android.Manifest
 import android.content.ActivityNotFoundException

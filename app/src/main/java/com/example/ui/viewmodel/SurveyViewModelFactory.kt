@@ -1,4 +1,4 @@
-package com.dhananan.civicage.ui.viewmodel
+package com.nlud.civilagesurvey.ui.viewmodel
 
 import android.app.Application
 import androidx.lifecycle.ViewModel

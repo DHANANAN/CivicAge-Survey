@@ -1,4 +1,4 @@
-package com.dhananan.civicage
+package com.nlud.civilagesurvey
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider

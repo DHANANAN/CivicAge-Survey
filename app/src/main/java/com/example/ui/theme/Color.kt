@@ -1,4 +1,4 @@
-package com.dhananan.civicage.ui.theme
+package com.nlud.civilagesurvey.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

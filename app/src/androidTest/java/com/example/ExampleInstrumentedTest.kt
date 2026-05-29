@@ -1,4 +1,4 @@
-package com.dhananan.civicage
+package com.nlud.civilagesurvey
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry

@@ -1,4 +1,4 @@
-package com.dhananan.civicage.data.api
+package com.nlud.civilagesurvey.data.api
 
 import com.squareup.moshi.JsonClass
 

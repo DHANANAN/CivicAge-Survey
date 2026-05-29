@@ -1,4 +1,4 @@
-package com.dhananan.civicage.config
+package com.nlud.civilagesurvey.config
 
 import com.example.BuildConfig
 

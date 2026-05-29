@@ -1,4 +1,4 @@
-package com.dhananan.civicage.data.database
+package com.nlud.civilagesurvey.data.database
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey

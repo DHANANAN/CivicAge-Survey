@@ -1,4 +1,4 @@
-package com.dhananan.civicage
+package com.nlud.civilagesurvey
 
 import androidx.compose.material3.Text
 import androidx.compose.ui.test.junit4.createComposeRule

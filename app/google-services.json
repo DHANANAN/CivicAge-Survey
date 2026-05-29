@@ -1,21 +1,21 @@
 {
   "project_info": {
-    "project_number": "123456789012",
-    "project_id": "dummy-project-id",
-    "storage_bucket": "dummy-project-id.appspot.com"
+    "project_number": "777856548247",
+    "project_id": "civilage-survey",
+    "storage_bucket": "civilage-survey.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:123456789012:android:0000000000000000000000",
+        "mobilesdk_app_id": "1:777856548247:android:47a93a9ba35b99422398d2",
         "android_client_info": {
-          "package_name": "com.dhananan.civicage"
+          "package_name": "com.nlud.civilagesurvey"
         }
       },
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "dummy_api_key_placeholder"
+          "current_key": "AIzaSyAIsK3uoIitaotR1K9CloPMQKy3J_Pxelk"
         }
       ],
       "services": {

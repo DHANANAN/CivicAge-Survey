@@ -1,4 +1,4 @@
-package com.dhananan.civicage.data.database
+package com.nlud.civilagesurvey.data.database
 
 import android.content.Context
 import androidx.room.Database
