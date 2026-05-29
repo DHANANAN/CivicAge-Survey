@@ -29,11 +29,11 @@ if (file("google-services.json").exists()) {
 }
 
 android {
-  namespace = "com.example"
+  namespace = "com.dhananan.civicage"
   compileSdk { version = release(36) { minorApiLevel = 1 } }
 
   defaultConfig {
-    applicationId = "com.aistudio.urbanage.uxtvqp"
+    applicationId = "com.dhananan.civicage"
     minSdk = 24
     targetSdk = 36
     versionCode = 1

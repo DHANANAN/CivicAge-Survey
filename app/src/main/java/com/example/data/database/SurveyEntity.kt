@@ -1,4 +1,4 @@
-package com.example.data.database
+package com.dhananan.civicage.data.database
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey

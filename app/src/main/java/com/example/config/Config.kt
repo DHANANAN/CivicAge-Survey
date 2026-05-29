@@ -1,4 +1,4 @@
-package com.example.config
+package com.dhananan.civicage.config
 
 import com.example.BuildConfig
 

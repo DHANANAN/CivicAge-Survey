@@ -1,4 +1,4 @@
-package com.example.data.api
+package com.dhananan.civicage.data.api
 
 import com.example.config.Config
 import com.squareup.moshi.Moshi

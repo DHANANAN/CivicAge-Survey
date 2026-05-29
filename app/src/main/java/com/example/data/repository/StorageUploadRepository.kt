@@ -1,4 +1,4 @@
-package com.example.data.repository
+package com.dhananan.civicage.data.repository
 
 import android.content.Context
 import android.net.Uri

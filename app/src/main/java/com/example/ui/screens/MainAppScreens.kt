@@ -1,4 +1,4 @@
-package com.example.ui.screens
+package com.dhananan.civicage.ui.screens
 
 import android.Manifest
 import android.content.ActivityNotFoundException

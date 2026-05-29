@@ -1,4 +1,4 @@
-package com.example.location
+package com.dhananan.civicage.location
 
 import android.annotation.SuppressLint
 import android.content.Context
