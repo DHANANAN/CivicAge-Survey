@@ -5,6 +5,7 @@ plugins {
   alias(libs.plugins.kotlin.compose)
   alias(libs.plugins.google.devtools.ksp)
   alias(libs.plugins.roborazzi)
+  id("com.google.gms.google-services")
 }
 
 // Task: After assemble, copy/rename APK/AAB outputs to include versionName in filename
@@ -50,10 +51,6 @@ fun configValue(key: String, fallback: String = ""): String {
 
 fun String.asBuildConfigString(): String =
   "\"" + replace("\\", "\\\\").replace("\"", "\\\"") + "\""
-
-if (file("google-services.json").exists()) {
-  apply(plugin = "com.google.gms.google-services")
-}
 
 android {
   namespace = "com.nlud.civilagesurvey"
