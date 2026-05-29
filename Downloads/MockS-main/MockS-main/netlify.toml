@@ -1,7 +1,0 @@
-[build]
-  publish = "."
-
-[[redirects]]
-  from = "/"
-  to = "/Vocab.html"
-  status = 301
