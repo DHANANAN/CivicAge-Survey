@@ -1,10 +1,31 @@
+import java.util.Properties
+
 plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.kotlin.compose)
   alias(libs.plugins.google.devtools.ksp)
   alias(libs.plugins.roborazzi)
-  alias(libs.plugins.secrets)
-  alias(libs.plugins.google.services)
+}
+
+val localProperties = Properties().apply {
+  val localPropertiesFile = rootProject.file("local.properties")
+  if (localPropertiesFile.exists()) {
+    localPropertiesFile.inputStream().use(::load)
+  }
+}
+
+fun configValue(key: String, fallback: String = ""): String {
+  return providers.gradleProperty(key).orNull
+    ?: localProperties.getProperty(key)
+    ?: System.getenv(key)
+    ?: fallback
+}
+
+fun String.asBuildConfigString(): String =
+  "\"" + replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+
+if (file("google-services.json").exists()) {
+  apply(plugin = "com.google.gms.google-services")
 }
 
 android {
@@ -19,6 +40,13 @@ android {
     versionName = "1.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+    buildConfigField("String", "ADMIN_EMAIL", configValue("ADMIN_EMAIL", "mdc18042007@gmail.com").asBuildConfigString())
+    buildConfigField("String", "DEFAULT_SURVEYOR_ID", configValue("DEFAULT_SURVEYOR_ID", "CAS-ADMIN-001").asBuildConfigString())
+    buildConfigField("String", "DEFAULT_FORM_ID", configValue("DEFAULT_FORM_ID").asBuildConfigString())
+    buildConfigField("String", "FORMS_WEB_APP_URL", configValue("FORMS_WEB_APP_URL").asBuildConfigString())
+    buildConfigField("String", "FORMS_SHARED_SECRET", configValue("FORMS_SHARED_SECRET").asBuildConfigString())
+    buildConfigField("String", "GEMINI_API_KEY", configValue("GEMINI_API_KEY").asBuildConfigString())
   }
 
   signingConfigs {
@@ -45,7 +73,10 @@ android {
       signingConfig = signingConfigs.getByName("release")
     }
     debug {
-      signingConfig = signingConfigs.getByName("debugConfig")
+      val debugKeystore = file("${rootDir}/debug.keystore")
+      if (debugKeystore.exists()) {
+        signingConfig = signingConfigs.getByName("debugConfig")
+      }
     }
   }
   compileOptions {
@@ -57,13 +88,6 @@ android {
     buildConfig = true
   }
   testOptions { unitTests { isIncludeAndroidResources = true } }
-}
-
-// Configure the Secrets Gradle Plugin to use .env and .env.example files
-// to match the convention used in Web projects.
-secrets {
-  propertiesFileName = ".env"
-  defaultPropertiesFileName = ".env.example"
 }
 
 // Some unused dependencies are commented out below instead of being removed.
@@ -94,11 +118,13 @@ dependencies {
   implementation(libs.coil.compose)
   implementation(libs.converter.moshi)
   implementation(libs.firebase.ai)
+  implementation(libs.firebase.analytics)
   implementation(libs.firebase.auth)
   implementation(libs.firebase.firestore)
   implementation(libs.firebase.storage)
   implementation(libs.kotlinx.coroutines.android)
   implementation(libs.kotlinx.coroutines.core)
+  implementation(libs.kotlinx.coroutines.play.services)
   implementation(libs.logging.interceptor)
   implementation(libs.moshi.kotlin)
   implementation(libs.okhttp)

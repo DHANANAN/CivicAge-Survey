@@ -7,49 +7,46 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
 val Typography = Typography(
-    // Large body font for elderly users to read comfortably
     bodyLarge = TextStyle(
         fontFamily = FontFamily.Default,
         fontWeight = FontWeight.Normal,
-        fontSize = 18.sp,
-        lineHeight = 26.sp,
-        letterSpacing = 0.5.sp
+        fontSize = 17.sp,
+        lineHeight = 25.sp,
+        letterSpacing = 0.sp
     ),
     bodyMedium = TextStyle(
         fontFamily = FontFamily.Default,
         fontWeight = FontWeight.Normal,
-        fontSize = 16.sp,
+        fontSize = 15.sp,
         lineHeight = 22.sp,
-        letterSpacing = 0.25.sp
+        letterSpacing = 0.sp
     ),
-    // Clear display headings
     titleLarge = TextStyle(
         fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Bold,
+        fontWeight = FontWeight.SemiBold,
         fontSize = 22.sp,
         lineHeight = 28.sp,
         letterSpacing = 0.sp
     ),
     titleMedium = TextStyle(
         fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Medium,
+        fontWeight = FontWeight.SemiBold,
         fontSize = 20.sp,
         lineHeight = 26.sp,
-        letterSpacing = 0.15.sp
+        letterSpacing = 0.sp
     ),
     displayMedium = TextStyle(
         fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.ExtraBold,
+        fontWeight = FontWeight.Bold,
         fontSize = 26.sp,
         lineHeight = 34.sp,
-        letterSpacing = (-0.5).sp
+        letterSpacing = 0.sp
     ),
-    // Distinct labels for buttons/ratings
     labelLarge = TextStyle(
         fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Bold,
-        fontSize = 16.sp,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 17.sp,
         lineHeight = 24.sp,
-        letterSpacing = 1.25.sp
+        letterSpacing = 0.sp
     )
 )

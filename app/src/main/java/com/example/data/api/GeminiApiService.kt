@@ -1,6 +1,6 @@
 package com.example.data.api
 
-import com.example.BuildConfig
+import com.example.config.Config
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import okhttp3.OkHttpClient
@@ -46,7 +46,7 @@ object GeminiApiClient {
      * Returns a JSON text string with keys "summary" and "themes".
      */
     suspend fun summarizeAndExtractThemes(transcript: String): String? {
-        val apiKey = BuildConfig.GEMINI_API_KEY
+        val apiKey = Config.GEMINI_API_KEY
         if (apiKey.isBlank() || apiKey == "MY_GEMINI_API_KEY") {
             return null
         }

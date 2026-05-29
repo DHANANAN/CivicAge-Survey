@@ -2,32 +2,49 @@ package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// NLUD Inspired Academic Color Palette
-val InstitutionalMaroon = Color(0xFF7A0019)
-val InstitutionalMaroonDark = Color(0xFF4B0010)
-val AcademicGold = Color(0xFFD4A017)
-val SoftGoldBg = Color(0xFFFFF6D8)
-val WarmOffWhiteBg = Color(0xFFFAF7F0)
-val AcademicSurface = Color(0xFFFFFBF2)
-val AcademicTextPrimary = Color(0xFF1F1F1F)
-val AcademicTextSecondary = Color(0xFF4A4A4A)
+val CivicBackground = Color(0xFFFFFFFF)
+val CivicSurface = Color(0xFFF8FAFC)
+val CivicTextPrimary = Color(0xFF111827)
+val CivicTextSecondary = Color(0xFF374151)
+val CivicTextMuted = Color(0xFF6B7280)
+val CivicPrimaryAccent = Color(0xFF0F172A)
+val CivicBlue = Color(0xFF1D4ED8)
+val CivicSoftBlue = Color(0xFFEFF6FF)
+val CivicBorder = Color(0xFFE5E7EB)
+val CivicSuccess = Color(0xFF166534)
+val CivicWarning = Color(0xFFB45309)
+val CivicError = Color(0xFFB91C1C)
 
-// Senior High Contrast Accessories & Fallbacks matches
-val UrbanNavy = InstitutionalMaroon
-val CivicTeal = Color(0xFF00796B)
-val PlanningGold = AcademicGold
-val SoftGreyBg = WarmOffWhiteBg
-val CharTextPrimary = AcademicTextPrimary
+val CivicDarkBackground = Color(0xFF0B0F14)
+val CivicDarkSurface = Color(0xFF111827)
+val CivicDarkText = Color(0xFFF9FAFB)
+val CivicDarkSecondaryText = Color(0xFFD1D5DB)
+val CivicDarkBorder = Color(0xFF374151)
+val CivicDarkAccent = Color(0xFF60A5FA)
+
+// Backward-compatible names used by existing screens.
+val InstitutionalMaroon = CivicPrimaryAccent
+val InstitutionalMaroonDark = Color(0xFF020617)
+val AcademicGold = CivicBlue
+val SoftGoldBg = CivicSoftBlue
+val WarmOffWhiteBg = CivicBackground
+val AcademicSurface = CivicSurface
+val AcademicTextPrimary = CivicTextPrimary
+val AcademicTextSecondary = CivicTextSecondary
+
+val UrbanNavy = CivicPrimaryAccent
+val CivicTeal = CivicBlue
+val PlanningGold = CivicBlue
+val SoftGreyBg = CivicSurface
+val CharTextPrimary = CivicTextPrimary
 
 val OnNavyPrimary = Color(0xFFFFFFFF)
-val GreenSuccess = Color(0xFF1B5E20)
-val RedError = Color(0xFFB3261E)
-val OrangeWarning = Color(0xFFD4A017)
+val GreenSuccess = CivicSuccess
+val RedError = CivicError
+val OrangeWarning = CivicWarning
 
-// Secondary/Light states for dynamic depth
-val SlateGrey = Color(0xFFEFEBE4)
-val AccentHover = Color(0xFFFFF6D8)
-val DarkNavyBg = InstitutionalMaroonDark
-val DarkSurface = Color(0xFF33000A)
-val DarkOnSurface = Color(0xFFFFFBF2)
-
+val SlateGrey = CivicBorder
+val AccentHover = CivicSoftBlue
+val DarkNavyBg = CivicDarkBackground
+val DarkSurface = CivicDarkSurface
+val DarkOnSurface = CivicDarkText

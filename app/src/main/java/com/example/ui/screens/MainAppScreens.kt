@@ -1,6 +1,13 @@
 package com.example.ui.screens
 
+import android.Manifest
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
@@ -21,12 +28,15 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.core.content.ContextCompat
+import com.example.config.Config
 import com.example.data.database.FormQuestionEntity
 import com.example.data.database.SurveyEntity
 import com.example.ui.theme.*
@@ -49,7 +59,6 @@ fun MainSurveyApp(viewModel: SurveyViewModel) {
     val questionsList by viewModel.activeQuestions.collectAsState()
 
     val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
 
     Scaffold(
         topBar = {
@@ -88,62 +97,19 @@ fun MainSurveyApp(viewModel: SurveyViewModel) {
                     titleContentColor = Color.White
                 ),
                 actions = {
-                    // Role quick switcher component to test all system layers
                     val userRole by viewModel.userRole.collectAsState()
-                    var showRoleMenu by remember { mutableStateOf(false) }
-
-                    Box {
-                        TextButton(
-                            onClick = { showRoleMenu = true },
-                            colors = ButtonDefaults.textButtonColors(contentColor = Color.White)
-                        ) {
-                            Icon(
-                                imageVector = when (userRole) {
-                                    "Admin/Test Admin" -> Icons.Default.AdminPanelSettings
-                                    else -> Icons.Default.DirectionsWalk
-                                },
-                                contentDescription = "Role Mode",
-                                tint = MaterialTheme.colorScheme.tertiary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(userRole, style = MaterialTheme.typography.labelSmall)
-                            Icon(Icons.Default.ArrowDropDown, contentDescription = "Dropdown")
-                        }
-
-                        DropdownMenu(
-                            expanded = showRoleMenu,
-                            onDismissRequest = { showRoleMenu = false }
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("Field Surveyor") },
-                                onClick = {
-                                    viewModel.updateProfile(
-                                        viewModel.surveyorPhone.value,
-                                        viewModel.surveyorEmail.value,
-                                        viewModel.surveyorName.value,
-                                        viewModel.surveyorId.value,
-                                        "Field Surveyor"
-                                    )
-                                    showRoleMenu = false
-                                    currentScreen = "dashboard"
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Admin/Test Admin") },
-                                onClick = {
-                                    viewModel.updateProfile(
-                                        viewModel.surveyorPhone.value,
-                                        viewModel.surveyorEmail.value,
-                                        viewModel.surveyorName.value,
-                                        viewModel.surveyorId.value,
-                                        "Admin/Test Admin"
-                                    )
-                                    showRoleMenu = false
-                                    currentScreen = "dashboard"
-                                }
-                            )
-                        }
+                    Row(
+                        modifier = Modifier.padding(end = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = if (userRole == Config.ADMIN_ROLE) Icons.Default.AdminPanelSettings else Icons.Default.DirectionsWalk,
+                            contentDescription = "Role",
+                            tint = MaterialTheme.colorScheme.tertiary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(userRole, color = Color.White, style = MaterialTheme.typography.labelSmall)
                     }
                 }
             )
@@ -225,6 +191,68 @@ fun MainSurveyApp(viewModel: SurveyViewModel) {
     }
 }
 
+private fun launchSurveyEmailIntent(
+    context: android.content.Context,
+    survey: SurveyEntity,
+    recipientEmail: String,
+    surveyJson: String
+): Boolean {
+    val subject = "CivicAge Survey (CAS) Report - ${survey.surveyUid}"
+    val body = buildString {
+        appendLine("CivicAge Survey (CAS)")
+        appendLine("Center for Urban Planning")
+        appendLine()
+        appendLine("Surveyor details")
+        appendLine("Name: ${survey.surveyorName}")
+        appendLine("Email: ${survey.surveyorEmail}")
+        appendLine("Surveyor ID: ${survey.surveyorId.ifBlank { survey.createdBy }}")
+        appendLine("Mobile: ${survey.surveyorPhone}")
+        appendLine("Role: ${survey.surveyorRole}")
+        appendLine()
+        appendLine("Respondent details")
+        appendLine("Name: ${survey.participantName}")
+        appendLine("Age: ${survey.participantAge}")
+        appendLine("Gender: ${survey.participantGender}")
+        appendLine("Locality: ${survey.manualLocality}")
+        appendLine()
+        appendLine("Consent status: ${if (survey.consentGiven) "Granted" else "Not granted"}")
+        appendLine("Geotag: ${survey.latitude}, ${survey.longitude} (+/- ${survey.gpsAccuracy}m)")
+        appendLine()
+        appendLine("Interview transcript")
+        appendLine(survey.reviewedTranscriptText.ifBlank { survey.transcriptText }.ifBlank { "No transcript available." })
+        appendLine()
+        appendLine("AI summary")
+        appendLine(survey.summaryText.ifBlank { "No AI summary available." })
+        appendLine("AI themes: ${survey.themesExtractionJson}")
+        appendLine("Urgency tag: ${survey.aiUrgencyTag.ifBlank { "Not tagged" }}")
+        appendLine()
+        appendLine("Firebase sync status: ${survey.firebaseSyncStatus}")
+        appendLine("Google Forms sync status: ${survey.googleFormsSyncStatus}")
+        appendLine("Local audio path: ${survey.interviewAudioLocalPath ?: "No audio"}")
+        appendLine("Local photo path: ${survey.participantPhotoLocalPath ?: "No photo"}")
+        appendLine("Local JSON path: ${survey.jsonExportPath ?: "No JSON export"}")
+        appendLine()
+        appendLine("Research JSON")
+        appendLine(surveyJson)
+        appendLine()
+        appendLine("TODO for backend auto-email: Use Cloud Function, Apps Script, or Gmail API OAuth.")
+    }
+
+    val intent = Intent(Intent.ACTION_SENDTO).apply {
+        data = Uri.parse("mailto:")
+        putExtra(Intent.EXTRA_EMAIL, arrayOf(recipientEmail))
+        putExtra(Intent.EXTRA_SUBJECT, subject)
+        putExtra(Intent.EXTRA_TEXT, body)
+    }
+
+    return try {
+        context.startActivity(Intent.createChooser(intent, "Email CAS report"))
+        true
+    } catch (_: ActivityNotFoundException) {
+        false
+    }
+}
+
 // ==========================================
 // 1. AUTHENTICATION / EMAIL-BASED LOGIN
 // ==========================================
@@ -235,10 +263,14 @@ fun LoginScreen(
 ) {
     var phoneInput by remember { mutableStateOf("") }
     var emailInput by remember { mutableStateOf("") }
+    var passwordInput by remember { mutableStateOf("") }
     var nameInput by remember { mutableStateOf("") }
     var surveyorIdInput by remember { mutableStateOf("") }
+    var isCreateAccount by remember { mutableStateOf(false) }
     
     val context = LocalContext.current
+    val authStatus by viewModel.authStatusMessage.collectAsState()
+    val firebaseStatus by viewModel.firebaseConnectionStatus.collectAsState()
 
     Column(
         modifier = Modifier
@@ -277,11 +309,20 @@ fun LoginScreen(
                 )
 
                 Text(
-                    text = "Center for Urban Planning\nSenior Citizen Wellbeing Project Field Access Limit",
+                    text = "Center for Urban Planning\nFirebase email/password access",
                     style = MaterialTheme.typography.bodyMedium,
                     color = Color.Gray,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(top = 4.dp, bottom = 24.dp)
+                )
+
+                AssistChip(
+                    onClick = {},
+                    label = { Text(firebaseStatus, maxLines = 3, overflow = TextOverflow.Ellipsis) },
+                    leadingIcon = { Icon(Icons.Default.Cloud, contentDescription = "Firebase status", modifier = Modifier.size(18.dp)) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp)
                 )
 
                 OutlinedTextField(
@@ -323,6 +364,20 @@ fun LoginScreen(
                 )
 
                 OutlinedTextField(
+                    value = passwordInput,
+                    onValueChange = { passwordInput = it },
+                    label = { Text("Password") },
+                    leadingIcon = { Icon(Icons.Default.Lock, contentDescription = "Password") },
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp)
+                        .testTag("password_input"),
+                    singleLine = true
+                )
+
+                OutlinedTextField(
                     value = phoneInput,
                     onValueChange = { phoneInput = it },
                     label = { Text("Surveyor Mobile Number (Optional)") },
@@ -336,6 +391,26 @@ fun LoginScreen(
                     singleLine = true
                 )
 
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Create new Firebase account", fontWeight = FontWeight.SemiBold)
+                    Switch(checked = isCreateAccount, onCheckedChange = { isCreateAccount = it })
+                }
+
+                if (authStatus.isNotBlank()) {
+                    Text(
+                        authStatus,
+                        color = if (authStatus.contains("Signed in", ignoreCase = true)) GreenSuccess else OrangeWarning,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+                }
+
                 Button(
                     onClick = {
                         val trimmedName = nameInput.trim()
@@ -348,33 +423,46 @@ fun LoginScreen(
                             Toast.makeText(context, "Surveyor ID cannot be blank", Toast.LENGTH_SHORT).show()
                         } else if (!trimmedEmail.contains("@") || !trimmedEmail.substringAfter("@").contains(".")) {
                             Toast.makeText(context, "Please enter a valid email containing '@' and a domain", Toast.LENGTH_SHORT).show()
+                        } else if (passwordInput.length < 6) {
+                            Toast.makeText(context, "Password must be at least 6 characters", Toast.LENGTH_SHORT).show()
                         } else {
-                            // Assign role: if email is mdc18042007@gmail.com, set as Admin/Test Admin, else Field Surveyor
-                            val computedRole = if (trimmedEmail.equals("mdc18042007@gmail.com", ignoreCase = true)) {
-                                "Admin/Test Admin"
-                            } else {
-                                "Field Surveyor"
-                            }
-                            
-                            viewModel.updateProfile(
-                                phone = phoneInput.trim(),
+                            viewModel.signInOrSignUp(
                                 email = trimmedEmail,
-                                name = trimmedName,
-                                id = trimmedId,
-                                role = computedRole
-                            )
-                            Toast.makeText(context, "Successfully logged in as $computedRole", Toast.LENGTH_SHORT).show()
-                            onLoginSuccess()
+                                password = passwordInput,
+                                fullName = trimmedName,
+                                surveyorCode = trimmedId,
+                                mobileNumber = phoneInput.trim(),
+                                createAccount = isCreateAccount
+                            ) { success, message ->
+                                Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                                if (success) onLoginSuccess()
+                            }
                         }
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(50.dp)
+                        .height(54.dp)
                         .testTag("submit_login_button"),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                     shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text("Secure Login to CAS", style = MaterialTheme.typography.labelLarge.copy(color = Color.White))
+                    Text(if (isCreateAccount) "Create Account & Login" else "Firebase Login to CAS", style = MaterialTheme.typography.labelLarge.copy(color = Color.White))
+                }
+
+                TextButton(
+                    onClick = {
+                        viewModel.useLocalTestingMode(
+                            email = emailInput,
+                            fullName = nameInput,
+                            surveyorCode = surveyorIdInput,
+                            mobileNumber = phoneInput
+                        )
+                        Toast.makeText(context, "Local testing mode enabled. Cloud sync will remain pending.", Toast.LENGTH_LONG).show()
+                        onLoginSuccess()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Use Local Testing Mode")
                 }
             }
         }
@@ -544,11 +632,18 @@ fun DashboardScreen(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             val tabWeight = 1f
-            val tabOptions = listOf(
-                "surveys" to "Surveys",
-                "analytics" to "Analytics Panel",
-                "sync" to "Cloud Sync"
-            )
+            val tabOptions = if (userRole == Config.ADMIN_ROLE) {
+                listOf(
+                    "surveys" to "Surveys",
+                    "analytics" to "Admin",
+                    "sync" to "Pending Sync"
+                )
+            } else {
+                listOf(
+                    "surveys" to "My Surveys",
+                    "sync" to "Pending Sync"
+                )
+            }
 
             tabOptions.forEach { (key, label) ->
                 val isSelected = activeTab == key
@@ -831,9 +926,29 @@ fun SurveysListArea(
                                             }
                                         }
                                     }
+                                    "intent_opened" -> {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            modifier = Modifier.padding(vertical = 4.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Email,
+                                                contentDescription = "Email app opened",
+                                                tint = GreenSuccess,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                            Text(
+                                                "Email app opened. Android did not auto-send.",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = GreenSuccess
+                                            )
+                                        }
+                                    }
                                     else -> {
                                         Text(
-                                            "Report delivery queued locally. Feed an email below to send.",
+                                            "Report is ready. Android will open your email app for review.",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = Color.Gray
                                         )
@@ -845,7 +960,7 @@ fun SurveysListArea(
                                         value = recipientEmailInput,
                                         onValueChange = { recipientEmailInput = it },
                                         label = { Text("Recipient Email") },
-                                        placeholder = { Text("e.g. director@civicwellbeing.org") },
+                                        placeholder = { Text(Config.ADMIN_EMAIL) },
                                         modifier = Modifier.fillMaxWidth().testTag("recipient_email_input_${it.surveyUid}"),
                                         singleLine = true,
                                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
@@ -853,8 +968,14 @@ fun SurveysListArea(
                                     
                                     Button(
                                         onClick = {
-                                            viewModel.transmitSurveyViaEmail(it, recipientEmailInput) { feedback ->
-                                                Toast.makeText(context, feedback, Toast.LENGTH_SHORT).show()
+                                            val recipient = recipientEmailInput.ifBlank { Config.ADMIN_EMAIL }
+                                            val opened = launchSurveyEmailIntent(context, it, recipient, viewModel.exportSurveyToJson(it))
+                                            if (opened) {
+                                                viewModel.transmitSurveyViaEmail(it, recipient) { feedback ->
+                                                    Toast.makeText(context, feedback, Toast.LENGTH_SHORT).show()
+                                                }
+                                            } else {
+                                                Toast.makeText(context, "No email app found on this device.", Toast.LENGTH_LONG).show()
                                             }
                                         },
                                         modifier = Modifier.fillMaxWidth().testTag("transmit_report_button_${it.surveyUid}"),
@@ -862,7 +983,7 @@ fun SurveysListArea(
                                         shape = RoundedCornerShape(8.dp)
                                     ) {
                                         Text(
-                                            if (it.emailReportStatus == "failed") "Retry Secure Dispatch" else "Transmit Full Survey Report",
+                                            if (it.emailReportStatus == "failed") "Retry Email Intent" else "Email Current Survey Report",
                                             color = Color.White,
                                             style = MaterialTheme.typography.labelMedium
                                         )
@@ -925,6 +1046,10 @@ fun AdminSummaryArea(
     val scrollState = rememberScrollState()
     var selectedExportText by remember { mutableStateOf("") }
     var selectedExportUid by remember { mutableStateOf("") }
+    val pendingSyncCount by viewModel.pendingSyncCount.collectAsState()
+    val firestoreSurveyCount by viewModel.firestoreSurveyCount.collectAsState()
+    val googleFormsId by viewModel.googleFormsId.collectAsState()
+    val context = LocalContext.current
 
     Column(
         modifier = Modifier
@@ -971,8 +1096,20 @@ fun AdminSummaryArea(
                         Text("Drafts Remaining", fontSize = 12.sp, color = Color.Gray)
                     }
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("$synced", style = MaterialTheme.typography.displayMedium, color = CivicTeal)
-                        Text("Cloud Synced", fontSize = 12.sp, color = Color.Gray)
+                        Text("$pendingSyncCount", style = MaterialTheme.typography.displayMedium, color = CivicTeal)
+                        Text("Pending Sync", fontSize = 12.sp, color = Color.Gray)
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+                ProfileValueRow("Firestore surveys", firestoreSurveyCount?.toString() ?: "Unknown")
+                ProfileValueRow("Failed uploads", allSurveys.count { it.uploadStatus == "pending" || it.uploadStatus == "failed" }.toString())
+                ProfileValueRow("Connected Google Form", googleFormsId.ifBlank { "Not connected" })
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    Button(onClick = { viewModel.triggerCloudSync() }, modifier = Modifier.weight(1f)) {
+                        Text("Sync All")
+                    }
+                    OutlinedButton(onClick = { viewModel.refreshFirestoreSurveyCount() }, modifier = Modifier.weight(1f)) {
+                        Text("Refresh Cloud")
                     }
                 }
             }
@@ -1607,6 +1744,22 @@ fun ParticipantProfileScreen(
     var selectedAudioMock by remember { mutableStateOf<String?>(null) }
 
     val context = LocalContext.current
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) {
+            selectedPhotoMock = "/sdcard/photos/respondent_75plus_${Date().time}.jpg"
+            Toast.makeText(context, "Camera permission granted. Photo placeholder saved.", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(context, "Camera denied. Continue with manual profile details.", Toast.LENGTH_LONG).show()
+        }
+    }
+    val micPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) {
+            selectedAudioMock = "/sdcard/audio/sample_voice_${Date().time}.m4a"
+            Toast.makeText(context, "Microphone permission granted. Voice sample placeholder saved.", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(context, "Microphone denied. Manual transcript is still available.", Toast.LENGTH_LONG).show()
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -1710,8 +1863,12 @@ fun ParticipantProfileScreen(
                 ) {
                     Button(
                         onClick = {
-                            selectedPhotoMock = "/sdcard/photos/respondent_75plus_${Date().time}.jpg"
-                            Toast.makeText(context, "Simulated device camera capture verified!", Toast.LENGTH_SHORT).show()
+                            if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                                selectedPhotoMock = "/sdcard/photos/respondent_75plus_${Date().time}.jpg"
+                                Toast.makeText(context, "Photo placeholder saved.", Toast.LENGTH_SHORT).show()
+                            } else {
+                                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                            }
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = CivicTeal),
                         shape = RoundedCornerShape(8.dp)
@@ -1751,8 +1908,12 @@ fun ParticipantProfileScreen(
                 ) {
                     Button(
                         onClick = {
-                            selectedAudioMock = "/sdcard/audio/sample_voice_${Date().time}.m4a"
-                            Toast.makeText(context, "Voice id print validation saved!", Toast.LENGTH_SHORT).show()
+                            if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                                selectedAudioMock = "/sdcard/audio/sample_voice_${Date().time}.m4a"
+                                Toast.makeText(context, "Voice sample placeholder saved.", Toast.LENGTH_SHORT).show()
+                            } else {
+                                micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                            }
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = CivicTeal),
                         shape = RoundedCornerShape(8.dp)
@@ -1787,7 +1948,7 @@ fun ParticipantProfileScreen(
                 onClick = {
                     val ageVal = ageInput.toIntOrNull() ?: 0
                     if (nameInput.isNotBlank() && ageVal >= 75) {
-                        viewModel.updateParticipantProfile(nameInput, ageVal, genderInput)
+                        viewModel.updateParticipantProfile(nameInput, ageVal, genderInput, selectedPhotoMock, selectedAudioMock)
                         onNext()
                     } else {
                         Toast.makeText(context, "Verify name is entered and Respondent age is 75 or above.", Toast.LENGTH_LONG).show()
@@ -1821,6 +1982,16 @@ fun GeoLocationScreen(
     val gpsError by viewModel.gpsError.collectAsState()
 
     var manualLocalityText by remember { mutableStateOf(activeSurvey.manualLocality) }
+    val context = LocalContext.current
+    val locationPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
+        val granted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+            permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        if (granted) {
+            viewModel.fetchGpsCoordinates()
+        } else {
+            Toast.makeText(context, "Location denied. Enter locality manually and retry if needed.", Toast.LENGTH_LONG).show()
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -1893,7 +2064,20 @@ fun GeoLocationScreen(
                 }
 
                 Button(
-                    onClick = { viewModel.fetchGpsCoordinates() },
+                    onClick = {
+                        val fineGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                        val coarseGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                        if (fineGranted || coarseGranted) {
+                            viewModel.fetchGpsCoordinates()
+                        } else {
+                            locationPermissionLauncher.launch(
+                                arrayOf(
+                                    Manifest.permission.ACCESS_FINE_LOCATION,
+                                    Manifest.permission.ACCESS_COARSE_LOCATION
+                                )
+                            )
+                        }
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(50.dp)
@@ -2331,6 +2515,14 @@ fun InterviewScreen(
 
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+    val microphonePermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) {
+            viewModel.speakAloud("Voice recording started")
+            viewModel.startVoiceAnswer()
+        } else {
+            Toast.makeText(context, "Microphone denied. Please type the answer manually.", Toast.LENGTH_LONG).show()
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -2502,8 +2694,12 @@ fun InterviewScreen(
                         // Start button
                         Button(
                             onClick = {
-                                viewModel.speakAloud("Voice recording started")
-                                viewModel.startVoiceAnswer()
+                                if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                                    viewModel.speakAloud("Voice recording started")
+                                    viewModel.startVoiceAnswer()
+                                } else {
+                                    microphonePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                }
                             },
                             enabled = recordingState != "Listening",
                             colors = ButtonDefaults.buttonColors(containerColor = AcademicGold),
@@ -2827,6 +3023,27 @@ fun ThemeAnalysisScreen(
                         Text("Extract AI Summary & Themes", style = MaterialTheme.typography.labelLarge.copy(color = Color.White))
                     }
                 }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(onClick = { viewModel.cleanTranscriptWithAi() }, modifier = Modifier.weight(1f)) {
+                            Text("Clean Transcript", fontSize = 12.sp)
+                        }
+                        OutlinedButton(onClick = { viewModel.tagSentimentAndUrgency() }, modifier = Modifier.weight(1f)) {
+                            Text("Urgency Tag", fontSize = 12.sp)
+                        }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(onClick = { viewModel.convertSurveyToResearchJson() }, modifier = Modifier.weight(1f)) {
+                            Text("Research JSON", fontSize = 12.sp)
+                        }
+                        OutlinedButton(onClick = { viewModel.suggestFollowUpQuestion() }, modifier = Modifier.weight(1f)) {
+                            Text("Follow-Up", fontSize = 12.sp)
+                        }
+                    }
+                }
             }
         }
 
@@ -2850,6 +3067,16 @@ fun ThemeAnalysisScreen(
                             color = Color.DarkGray,
                             modifier = Modifier.padding(bottom = 16.dp)
                         )
+                    }
+
+                    if (activeSurvey.aiUrgencyTag.isNotBlank()) {
+                        Text("Urgency Tag", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text(activeSurvey.aiUrgencyTag, color = RedError, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 12.dp))
+                    }
+
+                    if (activeSurvey.aiFollowUpQuestion.isNotBlank()) {
+                        Text("Suggested Follow-Up Question", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text(activeSurvey.aiFollowUpQuestion, style = MaterialTheme.typography.bodyMedium, color = Color.DarkGray, modifier = Modifier.padding(bottom = 12.dp))
                     }
 
                     if (themesList.isNotEmpty()) {
@@ -2922,6 +3149,15 @@ fun OptionsScreen(
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+    val surveyorName by viewModel.surveyorName.collectAsState()
+    val surveyorEmail by viewModel.surveyorEmail.collectAsState()
+    val surveyorId by viewModel.surveyorId.collectAsState()
+    val userRole by viewModel.userRole.collectAsState()
+    val pendingSyncCount by viewModel.pendingSyncCount.collectAsState()
+    val allSurveys by viewModel.allSurveys.collectAsState()
+    val activeSurvey by viewModel.activeSurvey.collectAsState()
+    val firestoreSurveyCount by viewModel.firestoreSurveyCount.collectAsState()
+    val isWorkOffline by viewModel.isWorkOffline.collectAsState()
 
     // 1. Theme and appearance properties
     val selectAppearance by viewModel.appearanceMode.collectAsState()
@@ -2951,9 +3187,28 @@ fun OptionsScreen(
     val formsResponsesCount by viewModel.formsResponsesCount.collectAsState()
 
     // Permission status indicators simulation
-    var isRecordingPermissionGranted by remember { mutableStateOf(true) }
-    var isLocationPermissionGranted by remember { mutableStateOf(true) }
-    var isCameraPermissionGranted by remember { mutableStateOf(true) }
+    var isRecordingPermissionGranted by remember {
+        mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
+    }
+    var isLocationPermissionGranted by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+                ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+    var isCameraPermissionGranted by remember {
+        mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
+    }
+    val requestMicPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        isRecordingPermissionGranted = granted
+    }
+    val requestCameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        isCameraPermissionGranted = granted
+    }
+    val requestLocationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
+        isLocationPermissionGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+            permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+    }
 
     // Sync progress tracking
     var isSyncInProgress by remember { mutableStateOf(false) }
@@ -2980,6 +3235,36 @@ fun OptionsScreen(
                 style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                 color = MaterialTheme.colorScheme.primary
             )
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.AccountCircle, contentDescription = "Account", tint = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Account", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                }
+                ProfileValueRow("Name", surveyorName.ifBlank { "Not set" })
+                ProfileValueRow("Email", surveyorEmail.ifBlank { "Not set" })
+                ProfileValueRow("Surveyor ID", surveyorId.ifBlank { "Not set" })
+                ProfileValueRow("Role", userRole)
+                OutlinedButton(
+                    onClick = {
+                        viewModel.logout()
+                        Toast.makeText(context, "Logged out from Firebase.", Toast.LENGTH_SHORT).show()
+                        onBack()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Logout, contentDescription = "Logout", modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Logout")
+                }
+            }
         }
 
         // ==========================================
@@ -3018,6 +3303,30 @@ fun OptionsScreen(
                     }
                 }
 
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Enable Audio Backup Recording", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text("Keep local audio even if upload is pending", fontSize = 11.sp, color = Color.Gray)
+                    }
+                    Switch(checked = isAudioBackup, onCheckedChange = { viewModel.toggleAudioBackup(it) })
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Enable AI Summary", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text("AI failure never blocks saving", fontSize = 11.sp, color = Color.Gray)
+                    }
+                    Switch(checked = isAiSummary, onCheckedChange = { viewModel.toggleAiSummary(it) })
+                }
+
                 // Font Size selection
                 Text("Elderly Reading Font Size", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                 Row(
@@ -3050,6 +3359,18 @@ fun OptionsScreen(
                         Text("Enforce high contrast vector lines", fontSize = 12.sp, color = Color.Gray)
                     }
                     Switch(checked = isHighContrast, onCheckedChange = { viewModel.toggleHighContrast(it) })
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text("Fullscreen Mode", fontWeight = FontWeight.SemiBold)
+                        Text("Use more screen height for field workflows", fontSize = 12.sp, color = Color.Gray)
+                    }
+                    Switch(checked = isFullscreen, onCheckedChange = { viewModel.toggleFullscreen(it) })
                 }
             }
         }
@@ -3199,10 +3520,17 @@ fun OptionsScreen(
                 }
 
                 listOf(
-                    Triple("High-Precision GPS Locator", isLocationPermissionGranted, { isLocationPermissionGranted = !isLocationPermissionGranted }),
-                    Triple("Microphone Audio Inputs", isRecordingPermissionGranted, { isRecordingPermissionGranted = !isRecordingPermissionGranted }),
-                    Triple("Interviewer Document Camera", isCameraPermissionGranted, { isCameraPermissionGranted = !isCameraPermissionGranted })
-                ).forEach { (title, status, toggle) ->
+                    Triple("Location", isLocationPermissionGranted, {
+                        requestLocationPermission.launch(
+                            arrayOf(
+                                Manifest.permission.ACCESS_FINE_LOCATION,
+                                Manifest.permission.ACCESS_COARSE_LOCATION
+                            )
+                        )
+                    }),
+                    Triple("Microphone", isRecordingPermissionGranted, { requestMicPermission.launch(Manifest.permission.RECORD_AUDIO) }),
+                    Triple("Camera", isCameraPermissionGranted, { requestCameraPermission.launch(Manifest.permission.CAMERA) })
+                ).forEach { (title, status, request) ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -3224,7 +3552,9 @@ fun OptionsScreen(
                                 )
                             }
                             Spacer(modifier = Modifier.width(8.dp))
-                            Switch(checked = status, onCheckedChange = { toggle() })
+                            OutlinedButton(onClick = request, enabled = !status) {
+                                Text(if (status) "Granted" else "Request")
+                            }
                         }
                     }
                 }
@@ -3263,8 +3593,23 @@ fun OptionsScreen(
                             .background(Color(0xFFE3F2FD))
                             .padding(horizontal = 10.dp, vertical = 4.dp)
                     ) {
-                        Text("Active Standby Mode", color = Color(0xFF1565C0), fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                        Text(firebaseStatus, color = Color(0xFF1565C0), fontWeight = FontWeight.Bold, fontSize = 11.sp)
                     }
+                }
+
+                ProfileValueRow("Pending records", pendingSyncCount.toString())
+                ProfileValueRow("Firestore total", firestoreSurveyCount?.toString() ?: "Tap sync to refresh")
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Work Offline", fontWeight = FontWeight.SemiBold)
+                        Text("Keep all cloud sync pending until disabled", fontSize = 12.sp, color = Color.Gray)
+                    }
+                    Switch(checked = isWorkOffline, onCheckedChange = { viewModel.toggleWorkOffline(it) })
                 }
 
                 // Logs list visual
@@ -3324,19 +3669,16 @@ fun OptionsScreen(
                         isSyncInProgress = true
                         syncPhase = "Local"
                         coroutineScope.launch {
-                            delay(1200)
-                            syncPhase = "Firebase"
-                            delay(1500)
-                            syncPhase = "Storage"
-                            delay(1500)
-                            syncPhase = "Forms"
-                            delay(1200)
-                            syncPhase = "Completed"
-                            delay(800)
-                            isSyncInProgress = false
-                            viewModel.lastFirebaseSyncTime.value = System.currentTimeMillis()
                             viewModel.triggerCloudSync()
-                            Toast.makeText(context, "Full Offline-First Sync accomplished flawlessly!", Toast.LENGTH_LONG).show()
+                            syncPhase = "Firebase"
+                            delay(800)
+                            syncPhase = "Storage"
+                            delay(800)
+                            syncPhase = "Forms"
+                            delay(800)
+                            syncPhase = "Completed"
+                            isSyncInProgress = false
+                            Toast.makeText(context, "Sync requested. Failed cloud work remains pending locally.", Toast.LENGTH_LONG).show()
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
@@ -3350,8 +3692,17 @@ fun OptionsScreen(
                     } else {
                         Icon(Icons.Default.CloudSync, contentDescription = "Sync", tint = Color.White)
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Trigger Full Offline-First Sync")
+                        Text("Sync Now")
                     }
+                }
+
+                OutlinedButton(
+                    onClick = { viewModel.retryFailedUploads() },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.UploadFile, contentDescription = "Retry uploads", modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Retry Failed Uploads")
                 }
             }
         }
@@ -3383,7 +3734,7 @@ fun OptionsScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    listOf("English", "Hindi").forEach { lang ->
+                    listOf("Auto", "English", "Hindi").forEach { lang ->
                         val isSelected = selectedLanguage == lang
                         FilterChip(
                             selected = isSelected,
@@ -3422,6 +3773,19 @@ fun OptionsScreen(
                     }
                     Switch(checked = isUrgencyTagging, onCheckedChange = { viewModel.toggleUrgencyTagging(it) })
                 }
+
+                OutlinedButton(
+                    onClick = {
+                        viewModel.testGeminiConnection { _, message ->
+                            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.AutoAwesome, contentDescription = "Test Gemini", modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Test Gemini Connection")
+                }
             }
         }
 
@@ -3459,6 +3823,73 @@ fun OptionsScreen(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Generate JSON/TXT Data Files Bulk Package")
                 }
+
+                OutlinedButton(
+                    onClick = {
+                        val survey = activeSurvey
+                        if (survey == null) {
+                            Toast.makeText(context, "Open a survey first to export the current record.", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(context, viewModel.exportSurveyToJson(survey).take(160), Toast.LENGTH_LONG).show()
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Export Current Survey JSON")
+                }
+
+                OutlinedButton(
+                    onClick = {
+                        val body = allSurveys.joinToString(separator = "\n\n") { viewModel.exportSurveyToJson(it) }
+                        val intent = Intent(Intent.ACTION_SENDTO).apply {
+                            data = Uri.parse("mailto:")
+                            putExtra(Intent.EXTRA_EMAIL, arrayOf(Config.ADMIN_EMAIL))
+                            putExtra(Intent.EXTRA_SUBJECT, "CivicAge Survey (CAS) All Local Records")
+                            putExtra(Intent.EXTRA_TEXT, body.ifBlank { "No local records available." })
+                        }
+                        try {
+                            context.startActivity(Intent.createChooser(intent, "Email all CAS records"))
+                            Toast.makeText(context, "Email app opened for all local records.", Toast.LENGTH_SHORT).show()
+                        } catch (_: ActivityNotFoundException) {
+                            Toast.makeText(context, "No email app found.", Toast.LENGTH_LONG).show()
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Email All Local Test Records")
+                }
+
+                if (userRole == Config.ADMIN_ROLE) {
+                    OutlinedButton(
+                        onClick = {
+                            viewModel.clearLocalTestData { message ->
+                                Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = RedError)
+                    ) {
+                        Text("Clear Local Test Data")
+                    }
+                }
+            }
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Info, contentDescription = "About", tint = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("About", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                }
+                Text("CivicAge Survey (CAS)", fontWeight = FontWeight.Bold)
+                Text("Center for Urban Planning")
+                Text("Version 1.0")
+                Text("Testing build: Firebase config must be supplied from Firebase Console.", color = Color.Gray, fontSize = 13.sp)
             }
         }
 

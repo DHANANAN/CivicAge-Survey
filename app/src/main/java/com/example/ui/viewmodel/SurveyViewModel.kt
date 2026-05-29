@@ -5,11 +5,19 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.audio.AudioRecorderHelper
 import com.example.audio.TextToSpeechHelper
+import com.example.config.Config
+import com.example.data.api.FormsEndpointClient
 import com.example.data.api.GeminiApiClient
 import com.example.data.database.FormQuestionEntity
 import com.example.data.database.SurveyEntity
+import com.example.data.database.SyncLogEntity
+import com.example.data.database.UserProfileEntity
 import com.example.data.model.DefaultQuestions
+import com.example.data.repository.CloudSyncRepository
+import com.example.data.repository.FirebaseAuthRepository
+import com.example.data.repository.FirebaseRuntime
 import com.example.data.repository.SurveyRepository
+import com.example.data.repository.StorageUploadRepository
 import com.example.location.LocationHelper
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
@@ -32,6 +40,10 @@ class SurveyViewModel(
     private val locationHelper = LocationHelper(context)
     private val audioRecorder = AudioRecorderHelper(context)
     private var ttsHelper = TextToSpeechHelper(context)
+    private val authRepository = FirebaseAuthRepository(context)
+    private val cloudSyncRepository = CloudSyncRepository(context)
+    private val storageUploadRepository = StorageUploadRepository(context)
+    private val formsEndpointClient = FormsEndpointClient()
 
     // User Session
     val surveyorPhone = MutableStateFlow("")
@@ -40,6 +52,9 @@ class SurveyViewModel(
     val surveyorId = MutableStateFlow("")
     val userRole = MutableStateFlow("Field Surveyor") // "Field Surveyor", "Admin/Test Admin"
     val isNetworkOnline = MutableStateFlow(true)
+    val authStatusMessage = MutableStateFlow("")
+    val isFirebaseAuthenticated = MutableStateFlow(false)
+    val activeUserUid = MutableStateFlow("")
 
     // Options and customization
     val appearanceMode = MutableStateFlow("Professional Light") // "Professional Light", "Black & White", "Dark"
@@ -53,8 +68,10 @@ class SurveyViewModel(
     val isUrgencyTaggingEnabled = MutableStateFlow(true)
     
     // Firebase connection status & sync log
-    val firebaseConnectionStatus = MutableStateFlow("Connected") // "Connected", "Config Missing", "Syncing", "Offline"
+    val firebaseConnectionStatus = MutableStateFlow(FirebaseRuntime.statusMessage(context))
     val lastFirebaseSyncTime = MutableStateFlow<Long?>(null)
+    val firestoreSurveyCount = MutableStateFlow<Long?>(null)
+    val isWorkOffline = MutableStateFlow(false)
     
     // Google Forms details
     val googleFormsId = MutableStateFlow("")
@@ -70,11 +87,17 @@ class SurveyViewModel(
     private val prefs = application.getSharedPreferences("cas_prefs", android.content.Context.MODE_PRIVATE)
 
     // Linked Form ID and details
-    val activeFormId = MutableStateFlow(DefaultQuestions.DEFAULT_FORM_ID)
+    val activeFormId = MutableStateFlow(Config.DEFAULT_FORM_ID.ifBlank { DefaultQuestions.DEFAULT_FORM_ID })
     val activeFormName = MutableStateFlow("Age-Friendly Smart City Citizen Wellbeing Survey")
 
     // Lists
     val allSurveys: StateFlow<List<SurveyEntity>> = repository.allSurveys
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val pendingSyncCount: StateFlow<Int> = repository.pendingSyncCount
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    val recentSyncLogs: StateFlow<List<SyncLogEntity>> = repository.recentSyncLogs
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val filteredSurveys: StateFlow<List<SurveyEntity>> = combine(allSurveys, userRole, surveyorId) { surveys, role, currentId ->
@@ -172,9 +195,20 @@ class SurveyViewModel(
         googleFormsId.value = prefs.getString("googleFormsId", "") ?: ""
         googleFormsTitle.value = prefs.getString("googleFormsTitle", "") ?: ""
         isFormsConnected.value = prefs.getBoolean("isFormsConnected", false)
+        isWorkOffline.value = prefs.getBoolean("isWorkOffline", false)
+        surveyorPhone.value = prefs.getString("surveyorPhone", "") ?: ""
+        surveyorEmail.value = prefs.getString("surveyorEmail", "") ?: ""
+        surveyorName.value = prefs.getString("surveyorName", "") ?: ""
+        surveyorId.value = prefs.getString("surveyorId", "") ?: ""
+        userRole.value = prefs.getString("userRole", Config.FIELD_SURVEYOR_ROLE) ?: Config.FIELD_SURVEYOR_ROLE
+        activeUserUid.value = authRepository.currentUid.orEmpty()
+        isFirebaseAuthenticated.value = authRepository.currentUid != null
 
         // Pre-populate Database with default questions if empty
         viewModelScope.launch {
+            repository.getLastUserProfile()?.let { profile ->
+                applyProfile(profile)
+            }
             repository.allQuestions.first().let { currentList ->
                 if (currentList.isEmpty()) {
                     repository.insertQuestions(DefaultQuestions.list)
@@ -183,18 +217,124 @@ class SurveyViewModel(
         }
     }
 
+    private fun appearanceSettingsMap(): Map<String, Any?> = mapOf(
+        "appearanceMode" to appearanceMode.value,
+        "fontSizeMode" to fontSizeMode.value,
+        "fullscreenMode" to isFullscreenMode.value,
+        "highContrast" to isHighContrast.value
+    )
+
+    private fun applyProfile(profile: UserProfileEntity) {
+        activeUserUid.value = profile.uid
+        surveyorPhone.value = profile.mobileNumber
+        surveyorEmail.value = profile.email
+        surveyorName.value = profile.fullName
+        surveyorId.value = profile.surveyorId
+        userRole.value = Config.roleForEmail(profile.email)
+        prefs.edit()
+            .putString("userUid", profile.uid)
+            .putString("surveyorPhone", profile.mobileNumber)
+            .putString("surveyorEmail", profile.email)
+            .putString("surveyorName", profile.fullName)
+            .putString("surveyorId", profile.surveyorId)
+            .putString("userRole", userRole.value)
+            .apply()
+    }
+
     // Authentication Setup
     fun updateProfile(phone: String, email: String, name: String, id: String, role: String) {
-        surveyorPhone.value = phone
         val normalizedEmail = email.lowercase().trim()
-        surveyorEmail.value = normalizedEmail
-        surveyorName.value = name
-        surveyorId.value = id
-        if (normalizedEmail == "mdc18042007@gmail.com") {
-            userRole.value = "Admin/Test Admin"
-        } else {
-            userRole.value = role
+        val computedRole = Config.roleForEmail(normalizedEmail).ifBlank { role.ifBlank { Config.FIELD_SURVEYOR_ROLE } }
+        val profile = UserProfileEntity(
+            uid = activeUserUid.value.ifBlank { "LOCAL-${id.ifBlank { Config.DEFAULT_SURVEYOR_ID }}" },
+            fullName = name.trim(),
+            email = normalizedEmail,
+            surveyorId = id.ifBlank { Config.DEFAULT_SURVEYOR_ID },
+            mobileNumber = phone.trim(),
+            role = computedRole,
+            active = true,
+            lastLoginAt = System.currentTimeMillis(),
+            appearanceSettingsJson = appearanceSettingsMap().toString()
+        )
+        applyProfile(profile)
+        viewModelScope.launch {
+            repository.upsertUserProfile(profile)
         }
+    }
+
+    fun signInOrSignUp(
+        email: String,
+        password: String,
+        fullName: String,
+        surveyorCode: String,
+        mobileNumber: String,
+        createAccount: Boolean,
+        onResult: (Boolean, String) -> Unit
+    ) {
+        val normalizedEmail = email.trim().lowercase()
+        if (normalizedEmail.isBlank() || password.isBlank() || fullName.trim().isBlank() || surveyorCode.trim().isBlank()) {
+            onResult(false, "Enter email, password, full name, and surveyor ID.")
+            return
+        }
+
+        viewModelScope.launch {
+            authStatusMessage.value = "Connecting to Firebase Auth..."
+            val result = authRepository.signInOrCreate(
+                email = normalizedEmail,
+                password = password,
+                fullName = fullName,
+                surveyorId = surveyorCode,
+                mobileNumber = mobileNumber,
+                createAccount = createAccount,
+                appearanceSettings = appearanceSettingsMap()
+            )
+
+            result.fold(
+                onSuccess = { profile ->
+                    applyProfile(profile)
+                    repository.upsertUserProfile(profile)
+                    isFirebaseAuthenticated.value = true
+                    firebaseConnectionStatus.value = authRepository.statusMessage()
+                    authStatusMessage.value = "Signed in as ${profile.role}."
+                    onResult(true, "Signed in as ${profile.role}.")
+                },
+                onFailure = { error ->
+                    isFirebaseAuthenticated.value = false
+                    firebaseConnectionStatus.value = authRepository.statusMessage()
+                    val message = error.message ?: "Firebase login failed."
+                    authStatusMessage.value = "$message Local testing mode is available only from the explicit button."
+                    onResult(false, authStatusMessage.value)
+                }
+            )
+        }
+    }
+
+    fun useLocalTestingMode(email: String, fullName: String, surveyorCode: String, mobileNumber: String) {
+        val resolvedEmail = email.trim().lowercase().ifBlank { Config.ADMIN_EMAIL }
+        val resolvedName = fullName.trim().ifBlank { "CAS Local Tester" }
+        val resolvedId = surveyorCode.trim().ifBlank { Config.DEFAULT_SURVEYOR_ID }
+        activeUserUid.value = "LOCAL-$resolvedId"
+        isFirebaseAuthenticated.value = false
+        updateProfile(
+            phone = mobileNumber,
+            email = resolvedEmail,
+            name = resolvedName,
+            id = resolvedId,
+            role = Config.roleForEmail(resolvedEmail)
+        )
+        authStatusMessage.value = "Local testing mode active. Firebase sync will stay pending until a valid google-services.json is added and Firebase sign-in succeeds."
+    }
+
+    fun logout() {
+        authRepository.signOut()
+        isFirebaseAuthenticated.value = false
+        activeUserUid.value = ""
+        authStatusMessage.value = "Logged out."
+    }
+
+    fun toggleWorkOffline(enabled: Boolean) {
+        isWorkOffline.value = enabled
+        prefs.edit().putBoolean("isWorkOffline", enabled).apply()
     }
 
     // Google Forms Import Native Simulation
@@ -317,23 +457,27 @@ class SurveyViewModel(
             return
         }
         viewModelScope.launch {
-            syncLogMessage.value = "Authenticating with secure Apps Script Gateway for Form ID: $formId..."
-            delay(1500)
+            syncLogMessage.value = "Checking Apps Script endpoint for Form ID: $formId..."
+            val endpointResult = formsEndpointClient.sendFormAction("connectForm", formId)
             
             googleFormsId.value = formId
-            googleFormsTitle.value = "Smart-City Elder Wellbeing Initiative (Synced)"
+            googleFormsTitle.value = "Smart-City Elder Wellbeing Initiative"
             isFormsConnected.value = true
             lastFormsSyncTime.value = System.currentTimeMillis()
-            formsMappingStatus.value = "Mapped 5 core MCQ + 1 open Text prompt. Firestore sync auto-active."
+            formsMappingStatus.value = if (endpointResult.success) {
+                "Endpoint connected. Firestore-first mirroring is active."
+            } else {
+                "Backend/App Script required: ${endpointResult.message}"
+            }
             
             prefs.edit()
                 .putString("googleFormsId", formId)
-                .putString("googleFormsTitle", "Smart-City Elder Wellbeing Initiative (Synced)")
+                .putString("googleFormsTitle", googleFormsTitle.value)
                 .putBoolean("isFormsConnected", true)
                 .apply()
                 
-            syncLogMessage.value = "Form successfully connected on ${SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())}"
-            onResult(true, "Successfully linked and loaded Form definitions!")
+            syncLogMessage.value = "Form link saved on ${SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())}. ${endpointResult.message}"
+            onResult(endpointResult.success, if (endpointResult.success) "Form endpoint connected." else endpointResult.message)
         }
     }
 
@@ -355,32 +499,32 @@ class SurveyViewModel(
     fun importQuestionsFromGoogleForm(formId: String, onResult: (Boolean, String) -> Unit) {
         viewModelScope.launch {
             syncLogMessage.value = "Querying questions schema from Google Forms via Cloud Endpoint..."
-            delay(1800)
+            val endpointResult = formsEndpointClient.sendFormAction("importQuestions", formId)
             
             importGoogleFormQuestions(formId, "Imported Smart-City Elder Survey")
-            onResult(true, "Successfully pulled and imported 5 Material-3 compatible questions.")
-            syncLogMessage.value = "Imported questions from Form successfully."
+            onResult(endpointResult.success, if (endpointResult.success) "Imported endpoint schema." else "Loaded CAS fallback question bank. ${endpointResult.message}")
+            syncLogMessage.value = "Question import finished. ${endpointResult.message}"
         }
     }
 
     fun pushQuestionBankToGoogleForm(formId: String, onResult: (Boolean, String) -> Unit) {
         viewModelScope.launch {
             syncLogMessage.value = "Pushing local Question Bank payload to Google Form schema..."
-            delay(1500)
+            val endpointResult = formsEndpointClient.sendFormAction("pushQuestionBank", formId)
             
-            onResult(true, "Questions successfully exported. Target Form schema updated with sections.")
-            syncLogMessage.value = "Exported questions schema to Form $formId"
+            onResult(endpointResult.success, endpointResult.message)
+            syncLogMessage.value = "Push question bank status: ${endpointResult.message}"
         }
     }
 
     fun pullFormResponsesCount(formId: String, onResult: (Boolean, String, Int) -> Unit) {
         viewModelScope.launch {
             syncLogMessage.value = "Retrieving Google Form response indexes..."
-            delay(1200)
+            val endpointResult = formsEndpointClient.sendFormAction("retrieveResponses", formId)
             
-            formsResponsesCount.value = (12..48).random()
-            onResult(true, "Form responses indexed.", formsResponsesCount.value)
-            syncLogMessage.value = "Indexed response records count: ${formsResponsesCount.value}"
+            formsResponsesCount.value = if (endpointResult.success) formsResponsesCount.value + 1 else formsResponsesCount.value
+            onResult(endpointResult.success, endpointResult.message, formsResponsesCount.value)
+            syncLogMessage.value = "Retrieve responses status: ${endpointResult.message}"
         }
     }
 
@@ -406,6 +550,7 @@ class SurveyViewModel(
             surveyUid = uid,
             createdBy = surveyorId.value,
             status = "DRAFT",
+            localRecordId = uid,
             consentGiven = true,
             photoConsent = hasPhotoConsent,
             audioConsent = hasAudioConsent,
@@ -413,10 +558,15 @@ class SurveyViewModel(
             dataUseConsent = hasDataConsent,
             participantCanWithdraw = hasWithdrawalRight,
             consentTimestamp = System.currentTimeMillis(),
+            surveyorUid = activeUserUid.value,
+            surveyorId = surveyorId.value,
             surveyorName = surveyorName.value,
             surveyorEmail = surveyorEmail.value,
             surveyorPhone = surveyorPhone.value,
-            surveyorRole = userRole.value
+            surveyorRole = userRole.value,
+            linkedGoogleFormId = googleFormsId.value.ifBlank { activeFormId.value },
+            firebaseSyncStatus = "pending",
+            googleFormsSyncStatus = if (googleFormsId.value.isBlank()) "not_configured" else "pending"
         )
 
         viewModelScope.launch {
@@ -464,7 +614,13 @@ class SurveyViewModel(
     }
 
     // Update Profile Fields of Participant
-    fun updateParticipantProfile(name: String, age: Int, gender: String) {
+    fun updateParticipantProfile(
+        name: String,
+        age: Int,
+        gender: String,
+        photoPath: String? = null,
+        voiceSamplePath: String? = null
+    ) {
         val current = activeSurvey.value ?: return
         val ageGroupStr = when {
             age in 75..79 -> "75-79"
@@ -473,10 +629,14 @@ class SurveyViewModel(
             else -> "75-79"
         }
         val updated = current.copy(
+            updatedAt = System.currentTimeMillis(),
             participantName = name,
             participantAge = age,
             participantAgeGroup = ageGroupStr,
-            participantGender = gender
+            participantGender = gender,
+            participantPhotoLocalPath = photoPath ?: current.participantPhotoLocalPath,
+            participantVoiceSampleLocalPath = voiceSamplePath ?: current.participantVoiceSampleLocalPath,
+            firebaseSyncStatus = "pending"
         )
         viewModelScope.launch {
             repository.insertSurvey(updated)
@@ -494,9 +654,11 @@ class SurveyViewModel(
                 val current = activeSurvey.value
                 if (current != null) {
                     val updated = current.copy(
+                        updatedAt = System.currentTimeMillis(),
                         latitude = loc.latitude,
                         longitude = loc.longitude,
-                        gpsAccuracy = loc.accuracy
+                        gpsAccuracy = loc.accuracy,
+                        firebaseSyncStatus = "pending"
                     )
                     viewModelScope.launch {
                         repository.insertSurvey(updated)
@@ -511,7 +673,11 @@ class SurveyViewModel(
 
     fun updateManualLocality(localityStr: String) {
         val current = activeSurvey.value ?: return
-        val updated = current.copy(manualLocality = localityStr)
+        val updated = current.copy(
+            updatedAt = System.currentTimeMillis(),
+            manualLocality = localityStr,
+            firebaseSyncStatus = "pending"
+        )
         viewModelScope.launch {
             repository.insertSurvey(updated)
             activeSurvey.value = updated
@@ -525,7 +691,11 @@ class SurveyViewModel(
         answersMap[questionId] = answerValue
         
         val newJson = answersAdapter.toJson(answersMap) ?: "{}"
-        val updated = current.copy(answersJson = newJson)
+        val updated = current.copy(
+            updatedAt = System.currentTimeMillis(),
+            answersJson = newJson,
+            firebaseSyncStatus = "pending"
+        )
         viewModelScope.launch {
             repository.insertSurvey(updated)
             activeSurvey.value = updated
@@ -634,9 +804,11 @@ class SurveyViewModel(
         }
         
         val updated = current.copy(
+            updatedAt = System.currentTimeMillis(),
             transcriptText = compiledText,
             reviewedTranscriptText = compiledText,
-            transcriptionStatus = "completed"
+            transcriptionStatus = "completed",
+            firebaseSyncStatus = "pending"
         )
         viewModelScope.launch {
             repository.insertSurvey(updated)
@@ -696,9 +868,12 @@ class SurveyViewModel(
             val current = activeSurvey.value
             if (current != null) {
                 val updated = current.copy(
+                    updatedAt = System.currentTimeMillis(),
                     interviewAudioLocalPath = file.absolutePath,
                     interviewAudioDurationSeconds = recordingDuration.value,
-                    transcriptionStatus = "recording_saved"
+                    transcriptionStatus = "recording_saved",
+                    uploadStatus = "pending",
+                    firebaseSyncStatus = "pending"
                 )
                 viewModelScope.launch {
                     repository.insertSurvey(updated)
@@ -736,8 +911,10 @@ class SurveyViewModel(
         val selectedText = mockTextOptions.random()
 
         val updated = current.copy(
+            updatedAt = System.currentTimeMillis(),
             transcriptionStatus = "completed",
-            transcriptText = selectedText
+            transcriptText = selectedText,
+            firebaseSyncStatus = "pending"
         )
         viewModelScope.launch {
             repository.insertSurvey(updated)
@@ -749,9 +926,11 @@ class SurveyViewModel(
     fun saveManualTranscriptCorrection(correctedText: String) {
         val current = activeSurvey.value ?: return
         val updated = current.copy(
+            updatedAt = System.currentTimeMillis(),
             transcriptText = correctedText,
             reviewedTranscriptText = correctedText,
-            transcriptionStatus = "reviewed"
+            transcriptionStatus = "reviewed",
+            firebaseSyncStatus = "pending"
         )
         viewModelScope.launch {
             repository.insertSurvey(updated)
@@ -766,7 +945,7 @@ class SurveyViewModel(
         if (transcript.isBlank()) return
 
         isAnalyzingWithGemini.value = true
-        apiCallStatus.value = "Analyzing transcript themes with Gemini-3.5-flash..."
+        apiCallStatus.value = "Analyzing transcript themes with Gemini..."
 
         viewModelScope.launch {
             val jsonResult = withContext(Dispatchers.IO) {
@@ -786,12 +965,19 @@ class SurveyViewModel(
                     val themesJson = stringsListAdapter.toJson(themes) ?: "[]"
 
                     val updated = current.copy(
+                        updatedAt = System.currentTimeMillis(),
                         summaryText = summary,
                         themesExtractionJson = themesJson,
-                        transcriptionStatus = "completed"
+                        transcriptionStatus = "completed",
+                        aiStatus = "completed",
+                        cleanedTranscriptText = cleanTranscriptLocally(transcript),
+                        aiUrgencyTag = deriveUrgencyTag(transcript),
+                        aiFollowUpQuestion = suggestFollowUpLocally(transcript),
+                        firebaseSyncStatus = "pending"
                     )
-                    repository.insertSurvey(updated)
-                    activeSurvey.value = updated
+                    val finalUpdated = updated.copy(aiResearchJson = buildResearchJson(updated))
+                    repository.insertSurvey(finalUpdated)
+                    activeSurvey.value = finalUpdated
                     apiCallStatus.value = "Analysis completed successfully."
                 } catch (e: Exception) {
                     e.printStackTrace()
@@ -834,18 +1020,180 @@ class SurveyViewModel(
         }
         themesList.add("suggestions")
 
-        val summary = "• Mentioned neighborhood concerns regarding accessibility barriers.\n• Highlighted problems with smartphone systems or utility payments.\n• Expressed worries on pavement maintenance and safe walkability."
+        val summary = "- Mentioned neighborhood concerns regarding accessibility barriers.\n- Highlighted problems with smartphone systems or utility payments.\n- Expressed worries on pavement maintenance and safe walkability."
         val themesJson = stringsListAdapter.toJson(themesList) ?: "[]"
 
         val updated = current.copy(
+            updatedAt = System.currentTimeMillis(),
             summaryText = summary,
             themesExtractionJson = themesJson,
-            transcriptionStatus = "completed"
+            transcriptionStatus = "completed",
+            aiStatus = "completed_local_fallback",
+            cleanedTranscriptText = cleanTranscriptLocally(transcript),
+            aiUrgencyTag = deriveUrgencyTag(transcript),
+            aiFollowUpQuestion = suggestFollowUpLocally(transcript),
+            firebaseSyncStatus = "pending"
         )
+        val finalUpdated = updated.copy(aiResearchJson = buildResearchJson(updated))
+        viewModelScope.launch {
+            repository.insertSurvey(finalUpdated)
+            activeSurvey.value = finalUpdated
+        }
+    }
+
+    fun cleanTranscriptWithAi() {
+        val current = activeSurvey.value ?: return
+        val transcript = current.reviewedTranscriptText.ifBlank { current.transcriptText }
+        if (transcript.isBlank()) {
+            apiCallStatus.value = "Transcript is required before AI cleanup."
+            return
+        }
+        val updated = current.copy(
+            updatedAt = System.currentTimeMillis(),
+            cleanedTranscriptText = cleanTranscriptLocally(transcript),
+            reviewedTranscriptText = cleanTranscriptLocally(transcript),
+            aiStatus = "cleaned_local",
+            firebaseSyncStatus = "pending"
+        )
+        saveAiUpdatedSurvey(updated, "Transcript cleanup completed.")
+    }
+
+    fun summarizeInterviewWithAi() {
+        runGeminiAnalysis()
+    }
+
+    fun extractThemesWithAi() {
+        val current = activeSurvey.value ?: return
+        val transcript = current.reviewedTranscriptText.ifBlank { current.transcriptText }
+        if (transcript.isBlank()) {
+            apiCallStatus.value = "Transcript is required before theme extraction."
+            return
+        }
+        val themes = extractThemesLocally(transcript)
+        val updated = current.copy(
+            updatedAt = System.currentTimeMillis(),
+            themesExtractionJson = stringsListAdapter.toJson(themes) ?: "[]",
+            aiStatus = "themes_extracted_local",
+            firebaseSyncStatus = "pending"
+        )
+        saveAiUpdatedSurvey(updated, "Themes extracted locally. Gemini can be retried when configured.")
+    }
+
+    fun tagSentimentAndUrgency() {
+        val current = activeSurvey.value ?: return
+        val transcript = current.reviewedTranscriptText.ifBlank { current.transcriptText }
+        if (transcript.isBlank()) {
+            apiCallStatus.value = "Transcript is required before urgency tagging."
+            return
+        }
+        val updated = current.copy(
+            updatedAt = System.currentTimeMillis(),
+            aiUrgencyTag = deriveUrgencyTag(transcript),
+            aiStatus = "urgency_tagged_local",
+            firebaseSyncStatus = "pending"
+        )
+        saveAiUpdatedSurvey(updated, "Sentiment and urgency tag saved.")
+    }
+
+    fun convertSurveyToResearchJson() {
+        val current = activeSurvey.value ?: return
+        val updated = current.copy(
+            updatedAt = System.currentTimeMillis(),
+            aiResearchJson = buildResearchJson(current),
+            aiStatus = "research_json_ready",
+            firebaseSyncStatus = "pending"
+        )
+        saveAiUpdatedSurvey(updated, "Research JSON generated.")
+    }
+
+    fun suggestFollowUpQuestion() {
+        val current = activeSurvey.value ?: return
+        val transcript = current.reviewedTranscriptText.ifBlank { current.transcriptText }
+        if (transcript.isBlank()) {
+            apiCallStatus.value = "Transcript is required before follow-up suggestions."
+            return
+        }
+        val updated = current.copy(
+            updatedAt = System.currentTimeMillis(),
+            aiFollowUpQuestion = suggestFollowUpLocally(transcript),
+            aiStatus = "follow_up_suggested_local",
+            firebaseSyncStatus = "pending"
+        )
+        saveAiUpdatedSurvey(updated, "Follow-up question suggested.")
+    }
+
+    fun testGeminiConnection(onResult: (Boolean, String) -> Unit = { _, _ -> }) {
+        viewModelScope.launch {
+            if (Config.GEMINI_API_KEY.isBlank() || Config.GEMINI_API_KEY == "MY_GEMINI_API_KEY") {
+                val message = "Gemini API key is not configured. Add GEMINI_API_KEY in local.properties, or use Firebase AI from a backend-ready setup later."
+                apiCallStatus.value = message
+                onResult(false, message)
+                return@launch
+            }
+            val result = withContext(Dispatchers.IO) {
+                GeminiApiClient.summarizeAndExtractThemes("Test transcript: senior respondent needs safer walking routes and clinic access.")
+            }
+            val ok = result != null
+            val message = if (ok) "Gemini connection succeeded." else "Gemini request failed. Raw survey saving remains available."
+            apiCallStatus.value = message
+            onResult(ok, message)
+        }
+    }
+
+    private fun saveAiUpdatedSurvey(updated: SurveyEntity, statusMessage: String) {
         viewModelScope.launch {
             repository.insertSurvey(updated)
             activeSurvey.value = updated
+            apiCallStatus.value = statusMessage
         }
+    }
+
+    private fun cleanTranscriptLocally(transcript: String): String {
+        return transcript
+            .replace(Regex("\\b(um+|uh+|erm|ah+)\\b", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+    }
+
+    private fun extractThemesLocally(transcript: String): List<String> {
+        val text = transcript.lowercase()
+        val themesList = mutableListOf<String>()
+        if (text.contains("pavement") || text.contains("walk") || text.contains("accid") || text.contains("fall") || text.contains("step")) {
+            themesList.add("mobility")
+            themesList.add("accessibility")
+        }
+        if (text.contains("clinic") || text.contains("hospital") || text.contains("health") || text.contains("doctor")) themesList.add("healthcare")
+        if (text.contains("safe") || text.contains("dark") || text.contains("light") || text.contains("fast")) themesList.add("safety")
+        if (text.contains("phone") || text.contains("mobile") || text.contains("recharge") || text.contains("pension") || text.contains("app") || text.contains("digital")) themesList.add("digital access")
+        if (text.contains("office") || text.contains("bank") || text.contains("public")) themesList.add("public services")
+        if (text.contains("bus")) themesList.add("transport")
+        if (text.contains("lonely") || text.contains("social") || text.contains("disconnect") || text.contains("park")) themesList.add("social isolation")
+        if (text.contains("garbage") || text.contains("bin") || text.contains("clean") || text.contains("sanit")) themesList.add("sanitation")
+        themesList.add("suggestions")
+        return themesList.distinct()
+    }
+
+    private fun deriveUrgencyTag(transcript: String): String {
+        val text = transcript.lowercase()
+        return when {
+            listOf("fall", "accident", "unsafe", "extremely", "hospital", "dark", "violence").any { text.contains(it) } -> "High"
+            listOf("difficult", "broken", "blocked", "steep", "lonely", "clinic").any { text.contains(it) } -> "Medium"
+            else -> "Low"
+        }
+    }
+
+    private fun suggestFollowUpLocally(transcript: String): String {
+        val text = transcript.lowercase()
+        return when {
+            text.contains("hospital") || text.contains("clinic") -> "Which specific route or transport step makes healthcare visits hardest for you?"
+            text.contains("dark") || text.contains("light") -> "Which lane or junction should be prioritized first for lighting improvement?"
+            text.contains("digital") || text.contains("mobile") || text.contains("pension") -> "What would make the digital service easier: larger text, voice help, or local support?"
+            else -> "What is the single most important neighborhood change that would improve your daily wellbeing?"
+        }
+    }
+
+    private fun buildResearchJson(survey: SurveyEntity): String {
+        return exportSurveyToJson(survey)
     }
 
     fun getThemesList(themesJson: String): List<String> {
@@ -870,11 +1218,18 @@ class SurveyViewModel(
             
             // Build updated draft with surveyor details
             val updatedWithSurveyor = current.copy(
+                updatedAt = System.currentTimeMillis(),
                 status = "COMPLETED",
+                surveyorUid = activeUserUid.value,
+                surveyorId = surveyorId.value,
                 surveyorName = surveyorName.value,
                 surveyorEmail = surveyorEmail.value,
                 surveyorPhone = surveyorPhone.value,
-                surveyorRole = userRole.value
+                surveyorRole = userRole.value,
+                firebaseSyncStatus = "pending",
+                uploadStatus = "pending",
+                googleFormsSyncStatus = if (googleFormsId.value.isBlank()) "not_configured" else "pending",
+                linkedGoogleFormId = googleFormsId.value.ifBlank { activeFormId.value }
             )
             
             val jsonContent = exportSurveyToJson(updatedWithSurveyor)
@@ -903,18 +1258,124 @@ class SurveyViewModel(
             }
             
             val finalUpdated = updatedWithSurveyor.copy(
+                updatedAt = System.currentTimeMillis(),
                 jsonExportPath = jsonFile.absolutePath,
-                transcriptExportPath = transcriptFile.absolutePath
+                transcriptExportPath = transcriptFile.absolutePath,
+                aiResearchJson = buildResearchJson(updatedWithSurveyor)
             )
             
             repository.insertSurvey(finalUpdated)
             withContext(Dispatchers.Main) {
                 activeSurvey.value = finalUpdated
             }
+            syncSurveyAfterLocalSave(finalUpdated)
         }
     }
 
-    // Simulated network dispatch function
+    private suspend fun syncSurveyAfterLocalSave(survey: SurveyEntity) {
+        if (isWorkOffline.value) {
+            val pending = survey.copy(
+                firebaseSyncStatus = "pending",
+                uploadStatus = "pending",
+                googleFormsSyncStatus = if (googleFormsId.value.isBlank()) "not_configured" else "pending",
+                firebaseError = "Work offline mode is enabled."
+            )
+            repository.insertSurvey(pending)
+            writeLocalSyncLog(survey.surveyUid, "offline", "pending", "Work offline mode is enabled. Local Room record is safe.")
+            syncLogMessage.value = "Offline mode active. Survey ${survey.surveyUid} stays pending."
+            return
+        }
+
+        var workingSurvey = survey
+        syncLogMessage.value = "Uploading local media for ${survey.surveyUid}..."
+        val uploadResult = storageUploadRepository.uploadSurveyFiles(workingSurvey)
+        workingSurvey = workingSurvey.copy(
+            updatedAt = System.currentTimeMillis(),
+            photoStoragePath = uploadResult.fields["photoStoragePath"] ?: workingSurvey.photoStoragePath,
+            photoDownloadUrl = uploadResult.fields["photoDownloadUrl"] ?: workingSurvey.photoDownloadUrl,
+            consentAudioStoragePath = uploadResult.fields["consentAudioStoragePath"] ?: workingSurvey.consentAudioStoragePath,
+            consentAudioDownloadUrl = uploadResult.fields["consentAudioDownloadUrl"] ?: workingSurvey.consentAudioDownloadUrl,
+            interviewAudioStoragePath = uploadResult.fields["interviewAudioStoragePath"] ?: workingSurvey.interviewAudioStoragePath,
+            interviewAudioDownloadUrl = uploadResult.fields["interviewAudioDownloadUrl"] ?: workingSurvey.interviewAudioDownloadUrl,
+            jsonStoragePath = uploadResult.fields["jsonStoragePath"] ?: workingSurvey.jsonStoragePath,
+            jsonDownloadUrl = uploadResult.fields["jsonDownloadUrl"] ?: workingSurvey.jsonDownloadUrl,
+            uploadStatus = if (uploadResult.success) "uploaded" else "pending",
+            uploadError = if (uploadResult.success) "" else uploadResult.message
+        )
+        repository.insertSurvey(workingSurvey)
+        writeLocalSyncLog(workingSurvey.surveyUid, "storage", workingSurvey.uploadStatus, uploadResult.message)
+
+        syncLogMessage.value = "Syncing survey document to Firestore..."
+        val answers = getAnswersMap(workingSurvey.answersJson)
+        val themes = getThemesList(workingSurvey.themesExtractionJson)
+        val cloudResult = cloudSyncRepository.syncSurvey(
+            survey = workingSurvey,
+            mcqResponses = answers,
+            aiThemes = themes,
+            linkedFormId = googleFormsId.value.ifBlank { activeFormId.value }
+        )
+        workingSurvey = if (cloudResult.success) {
+            workingSurvey.copy(
+                updatedAt = System.currentTimeMillis(),
+                isSynced = true,
+                lastSyncedAt = System.currentTimeMillis(),
+                firebaseSyncStatus = "synced",
+                firebaseError = "",
+                firebaseDocumentPath = cloudResult.documentPath
+            )
+        } else {
+            workingSurvey.copy(
+                updatedAt = System.currentTimeMillis(),
+                isSynced = false,
+                firebaseSyncStatus = "pending",
+                firebaseError = cloudResult.message
+            )
+        }
+        repository.insertSurvey(workingSurvey)
+        writeLocalSyncLog(workingSurvey.surveyUid, "firestore", workingSurvey.firebaseSyncStatus, cloudResult.message)
+
+        if (cloudResult.success && googleFormsId.value.isNotBlank()) {
+            syncLogMessage.value = "Mirroring response through Google Forms/Sheets endpoint..."
+            val formsResult = formsEndpointClient.postSurveyResponse(workingSurvey, answers, themes)
+            workingSurvey = workingSurvey.copy(
+                updatedAt = System.currentTimeMillis(),
+                googleFormsSyncStatus = if (formsResult.success) "synced" else "pending",
+                googleFormsError = if (formsResult.success) "" else formsResult.message,
+                linkedGoogleResponseId = formsResult.responseId.ifBlank { workingSurvey.linkedGoogleResponseId },
+                linkedGoogleFormId = googleFormsId.value
+            )
+            repository.insertSurvey(workingSurvey)
+            writeLocalSyncLog(workingSurvey.surveyUid, "forms_endpoint", workingSurvey.googleFormsSyncStatus, formsResult.message)
+        }
+
+        withContext(Dispatchers.Main) {
+            if (activeSurveyUid.value == workingSurvey.surveyUid) {
+                activeSurvey.value = workingSurvey
+            }
+            lastFirebaseSyncTime.value = System.currentTimeMillis()
+            firebaseConnectionStatus.value = cloudSyncRepository.statusMessage()
+            syncLogMessage.value = if (workingSurvey.firebaseSyncStatus == "synced") {
+                "Cloud sync completed for ${workingSurvey.surveyUid}."
+            } else {
+                "Local save completed. Cloud sync pending: ${workingSurvey.firebaseError.ifBlank { workingSurvey.uploadError }}"
+            }
+        }
+        refreshFirestoreSurveyCount()
+    }
+
+    private suspend fun writeLocalSyncLog(surveyUid: String, target: String, status: String, message: String) {
+        repository.insertSyncLog(
+            SyncLogEntity(
+                logId = "${target}_${surveyUid}_${System.currentTimeMillis()}",
+                surveyUid = surveyUid,
+                target = target,
+                status = status,
+                message = message
+            )
+        )
+    }
+
+    // Android email intent status bookkeeping. The UI opens the chooser; the app never auto-sends Gmail.
     fun transmitSurveyViaEmail(survey: SurveyEntity, recipientEmail: String, onCompletion: (String) -> Unit = {}) {
         viewModelScope.launch {
             if (recipientEmail.isBlank() || !recipientEmail.contains("@")) {
@@ -927,33 +1388,15 @@ class SurveyViewModel(
                 return@launch
             }
 
-            // Transition state to sending
-            val sending = survey.copy(emailReportStatus = "sending")
-            repository.insertSurvey(sending)
+            val opened = survey.copy(
+                emailReportStatus = "intent_opened",
+                emailReportSentAt = System.currentTimeMillis()
+            )
+            repository.insertSurvey(opened)
             if (activeSurveyUid.value == survey.surveyUid) {
-                activeSurvey.value = sending
+                activeSurvey.value = opened
             }
-
-            delay(1500)
-
-            if (isNetworkOnline.value) {
-                val sent = survey.copy(
-                    emailReportStatus = "sent",
-                    emailReportSentAt = System.currentTimeMillis()
-                )
-                repository.insertSurvey(sent)
-                if (activeSurveyUid.value == survey.surveyUid) {
-                    activeSurvey.value = sent
-                }
-                onCompletion("Report successfully transmitted to $recipientEmail")
-            } else {
-                val failed = survey.copy(emailReportStatus = "failed")
-                repository.insertSurvey(failed)
-                if (activeSurveyUid.value == survey.surveyUid) {
-                    activeSurvey.value = failed
-                }
-                onCompletion("Transmission failed: Device is offline.")
-            }
+            onCompletion("Email app opened. Android will not auto-send this report.")
         }
     }
 
@@ -987,6 +1430,8 @@ class SurveyViewModel(
             "createdBy" to survey.createdBy,
             "status" to survey.status,
             "surveyor" to mapOf(
+                "uid" to survey.surveyorUid,
+                "surveyorId" to survey.surveyorId.ifBlank { survey.createdBy },
                 "name" to survey.surveyorName,
                 "email" to survey.surveyorEmail,
                 "phone" to survey.surveyorPhone,
@@ -999,6 +1444,25 @@ class SurveyViewModel(
             "exportPaths" to mapOf(
                 "json" to (survey.jsonExportPath ?: ""),
                 "transcript" to (survey.transcriptExportPath ?: "")
+            ),
+            "sync" to mapOf(
+                "firebaseSyncStatus" to survey.firebaseSyncStatus,
+                "googleFormsSyncStatus" to survey.googleFormsSyncStatus,
+                "uploadStatus" to survey.uploadStatus,
+                "firebaseDocumentPath" to survey.firebaseDocumentPath,
+                "linkedGoogleFormId" to survey.linkedGoogleFormId,
+                "linkedGoogleResponseId" to survey.linkedGoogleResponseId,
+                "lastSyncedAt" to survey.lastSyncedAt
+            ),
+            "storage" to mapOf(
+                "photoStoragePath" to survey.photoStoragePath,
+                "photoDownloadUrl" to survey.photoDownloadUrl,
+                "consentAudioStoragePath" to survey.consentAudioStoragePath,
+                "consentAudioDownloadUrl" to survey.consentAudioDownloadUrl,
+                "interviewAudioStoragePath" to survey.interviewAudioStoragePath,
+                "interviewAudioDownloadUrl" to survey.interviewAudioDownloadUrl,
+                "jsonStoragePath" to survey.jsonStoragePath,
+                "jsonDownloadUrl" to survey.jsonDownloadUrl
             ),
             "consent" to mapOf(
                 "consentGiven" to survey.consentGiven,
@@ -1026,8 +1490,12 @@ class SurveyViewModel(
                 "durationSeconds" to survey.interviewAudioDurationSeconds,
                 "transcriptionStatus" to survey.transcriptionStatus,
                 "transcript" to survey.transcriptText,
+                "cleanedTranscript" to survey.cleanedTranscriptText,
                 "aiSummary" to survey.summaryText,
-                "themes" to getThemesList(survey.themesExtractionJson)
+                "themes" to getThemesList(survey.themesExtractionJson),
+                "urgencyTag" to survey.aiUrgencyTag,
+                "followUpQuestion" to survey.aiFollowUpQuestion,
+                "aiStatus" to survey.aiStatus
             )
         )
 
@@ -1039,19 +1507,51 @@ class SurveyViewModel(
         }
     }
 
-    // Simulated cloud sync
-    fun triggerCloudSync() {
+    fun refreshFirestoreSurveyCount() {
         viewModelScope.launch {
-            val surveys = allSurveys.value
-            for (survey in surveys) {
-                if (!survey.isSynced) {
-                    val updated = survey.copy(isSynced = true, lastSyncedAt = System.currentTimeMillis())
-                    repository.insertSurvey(updated)
-                    if (activeSurveyUid.value == survey.surveyUid) {
-                        activeSurvey.value = updated
-                    }
-                }
+            val result = withContext(Dispatchers.IO) { cloudSyncRepository.countFirestoreSurveys() }
+            firestoreSurveyCount.value = result.getOrNull()
+        }
+    }
+
+    fun triggerCloudSync() {
+        viewModelScope.launch(Dispatchers.IO) {
+            syncLogMessage.value = "Checking pending Room records..."
+            val surveys = repository.getPendingSyncSurveys()
+            if (surveys.isEmpty()) {
+                syncLogMessage.value = "No pending local records."
+                return@launch
             }
+            for (survey in surveys) {
+                syncSurveyAfterLocalSave(survey)
+            }
+        }
+    }
+
+    fun retryFailedUploads() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val surveys = allSurveys.value.filter { it.uploadStatus == "pending" || it.uploadStatus == "failed" }
+            if (surveys.isEmpty()) {
+                syncLogMessage.value = "No failed uploads to retry."
+                return@launch
+            }
+            for (survey in surveys) {
+                syncSurveyAfterLocalSave(survey.copy(uploadStatus = "pending"))
+            }
+        }
+    }
+
+    fun clearLocalTestData(onResult: (String) -> Unit = {}) {
+        if (userRole.value != Config.ADMIN_ROLE) {
+            onResult("Only the Admin/Test Admin can clear local test data.")
+            return
+        }
+        viewModelScope.launch {
+            repository.clearAllSurveys()
+            repository.clearSyncLogs()
+            activeSurvey.value = null
+            activeSurveyUid.value = null
+            onResult("Local test survey records and sync logs cleared.")
         }
     }
 
