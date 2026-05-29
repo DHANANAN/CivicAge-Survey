@@ -7,12 +7,12 @@ import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.ViewModelProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import com.example.data.database.AppDatabase
-import com.example.data.repository.SurveyRepository
-import com.example.ui.screens.MainSurveyApp
-import com.example.ui.theme.MyApplicationTheme
-import com.example.ui.viewmodel.SurveyViewModel
-import com.example.ui.viewmodel.SurveyViewModelFactory
+import com.nlud.civilagesurvey.data.database.AppDatabase
+import com.nlud.civilagesurvey.data.repository.SurveyRepository
+import com.nlud.civilagesurvey.ui.screens.MainSurveyApp
+import com.nlud.civilagesurvey.ui.theme.MyApplicationTheme
+import com.nlud.civilagesurvey.ui.viewmodel.SurveyViewModel
+import com.nlud.civilagesurvey.ui.viewmodel.SurveyViewModelFactory
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -42,3 +42,4 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
+

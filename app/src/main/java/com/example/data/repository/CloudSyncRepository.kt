@@ -1,7 +1,7 @@
 package com.nlud.civilagesurvey.data.repository
 
 import android.content.Context
-import com.example.data.database.SurveyEntity
+import com.nlud.civilagesurvey.data.database.SurveyEntity
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
@@ -198,3 +198,4 @@ class CloudSyncRepository(
         return if (FirebaseApp.getApps(context).isEmpty()) null else FirebaseFirestore.getInstance()
     }
 }
+

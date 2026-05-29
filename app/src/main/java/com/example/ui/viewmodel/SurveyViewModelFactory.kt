@@ -3,7 +3,7 @@ package com.nlud.civilagesurvey.ui.viewmodel
 import android.app.Application
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
-import com.example.data.repository.SurveyRepository
+import com.nlud.civilagesurvey.data.repository.SurveyRepository
 
 class SurveyViewModelFactory(
     private val application: Application,
@@ -17,3 +17,4 @@ class SurveyViewModelFactory(
         throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
     }
 }
+

@@ -1,6 +1,6 @@
 package com.nlud.civilagesurvey.config
 
-import com.example.BuildConfig
+import com.nlud.civilagesurvey.BuildConfig
 
 object Config {
     val ADMIN_EMAIL: String = BuildConfig.ADMIN_EMAIL.ifBlank { "mdc18042007@gmail.com" }.trim().lowercase()
@@ -19,3 +19,4 @@ object Config {
         return if (email.trim().lowercase() == ADMIN_EMAIL) ADMIN_ROLE else FIELD_SURVEYOR_ROLE
     }
 }
+

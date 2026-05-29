@@ -1,7 +1,7 @@
 package com.nlud.civilagesurvey.data.api
 
-import com.example.config.Config
-import com.example.data.database.SurveyEntity
+import com.nlud.civilagesurvey.config.Config
+import com.nlud.civilagesurvey.data.database.SurveyEntity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -99,3 +99,4 @@ class FormsEndpointClient(
         }
     }
 }
+

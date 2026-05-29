@@ -1,6 +1,6 @@
 package com.nlud.civilagesurvey.data.model
 
-import com.example.data.database.FormQuestionEntity
+import com.nlud.civilagesurvey.data.database.FormQuestionEntity
 
 object DefaultQuestions {
     const val DEFAULT_FORM_ID = "URBAN_WELLBEING_V1"
@@ -62,3 +62,4 @@ object DefaultQuestions {
         )
     )
 }
+

@@ -2,7 +2,7 @@ package com.nlud.civilagesurvey.data.repository
 
 import android.content.Context
 import android.net.Uri
-import com.example.data.database.SurveyEntity
+import com.nlud.civilagesurvey.data.database.SurveyEntity
 import com.google.firebase.FirebaseApp
 import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.tasks.await
@@ -108,3 +108,4 @@ class StorageUploadRepository(
         return if (FirebaseApp.getApps(context).isEmpty()) null else FirebaseStorage.getInstance()
     }
 }
+

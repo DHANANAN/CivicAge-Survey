@@ -1,6 +1,6 @@
 package com.nlud.civilagesurvey.data.api
 
-import com.example.config.Config
+import com.nlud.civilagesurvey.config.Config
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import okhttp3.OkHttpClient
@@ -91,3 +91,4 @@ object GeminiApiClient {
         }
     }
 }
+

@@ -1,10 +1,10 @@
 package com.nlud.civilagesurvey.data.repository
 
-import com.example.data.database.FormQuestionEntity
-import com.example.data.database.SurveyDao
-import com.example.data.database.SurveyEntity
-import com.example.data.database.SyncLogEntity
-import com.example.data.database.UserProfileEntity
+import com.nlud.civilagesurvey.data.database.FormQuestionEntity
+import com.nlud.civilagesurvey.data.database.SurveyDao
+import com.nlud.civilagesurvey.data.database.SurveyEntity
+import com.nlud.civilagesurvey.data.database.SyncLogEntity
+import com.nlud.civilagesurvey.data.database.UserProfileEntity
 import kotlinx.coroutines.flow.Flow
 
 class SurveyRepository(private val surveyDao: SurveyDao) {
@@ -79,3 +79,4 @@ class SurveyRepository(private val surveyDao: SurveyDao) {
         surveyDao.clearSyncLogs()
     }
 }
+

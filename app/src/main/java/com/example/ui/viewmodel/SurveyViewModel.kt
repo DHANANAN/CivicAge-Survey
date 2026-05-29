@@ -3,22 +3,22 @@ package com.nlud.civilagesurvey.ui.viewmodel
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.audio.AudioRecorderHelper
-import com.example.audio.TextToSpeechHelper
-import com.example.config.Config
-import com.example.data.api.FormsEndpointClient
-import com.example.data.api.GeminiApiClient
-import com.example.data.database.FormQuestionEntity
-import com.example.data.database.SurveyEntity
-import com.example.data.database.SyncLogEntity
-import com.example.data.database.UserProfileEntity
-import com.example.data.model.DefaultQuestions
-import com.example.data.repository.CloudSyncRepository
-import com.example.data.repository.FirebaseAuthRepository
-import com.example.data.repository.FirebaseRuntime
-import com.example.data.repository.SurveyRepository
-import com.example.data.repository.StorageUploadRepository
-import com.example.location.LocationHelper
+import com.nlud.civilagesurvey.audio.AudioRecorderHelper
+import com.nlud.civilagesurvey.audio.TextToSpeechHelper
+import com.nlud.civilagesurvey.config.Config
+import com.nlud.civilagesurvey.data.api.FormsEndpointClient
+import com.nlud.civilagesurvey.data.api.GeminiApiClient
+import com.nlud.civilagesurvey.data.database.FormQuestionEntity
+import com.nlud.civilagesurvey.data.database.SurveyEntity
+import com.nlud.civilagesurvey.data.database.SyncLogEntity
+import com.nlud.civilagesurvey.data.database.UserProfileEntity
+import com.nlud.civilagesurvey.data.model.DefaultQuestions
+import com.nlud.civilagesurvey.data.repository.CloudSyncRepository
+import com.nlud.civilagesurvey.data.repository.FirebaseAuthRepository
+import com.nlud.civilagesurvey.data.repository.FirebaseRuntime
+import com.nlud.civilagesurvey.data.repository.SurveyRepository
+import com.nlud.civilagesurvey.data.repository.StorageUploadRepository
+import com.nlud.civilagesurvey.location.LocationHelper
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
@@ -1561,3 +1561,4 @@ class SurveyViewModel(
         stopRecordingTimer()
     }
 }
+

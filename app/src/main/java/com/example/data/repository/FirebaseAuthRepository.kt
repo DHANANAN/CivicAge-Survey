@@ -1,8 +1,8 @@
 package com.nlud.civilagesurvey.data.repository
 
 import android.content.Context
-import com.example.config.Config
-import com.example.data.database.UserProfileEntity
+import com.nlud.civilagesurvey.config.Config
+import com.nlud.civilagesurvey.data.database.UserProfileEntity
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
@@ -105,3 +105,4 @@ class FirebaseAuthRepository(
         return if (FirebaseApp.getApps(context).isEmpty()) null else FirebaseFirestore.getInstance()
     }
 }
+

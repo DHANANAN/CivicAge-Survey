@@ -8,33 +8,6 @@ plugins {
   id("com.google.gms.google-services")
 }
 
-// Task: After assemble, copy/rename APK/AAB outputs to include versionName in filename
-val renameBuildOutputs = tasks.register("renameBuildOutputs") {
-  doLast {
-    val verName = android.defaultConfig.versionName ?: "v"
-    val outputsDir = file("$buildDir/outputs")
-    if (!outputsDir.exists()) return@doLast
-
-    outputsDir.walkTopDown().filter { it.isFile && (it.extension == "apk" || it.extension == "aab") }
-      .forEach { outFile ->
-        try {
-          val parent = outFile.parentFile
-          val base = outFile.nameWithoutExtension
-          val newName = "${base}-${verName}.${outFile.extension}"
-          val dest = File(parent, newName)
-          outFile.copyTo(dest, overwrite = true)
-        } catch (e: Exception) {
-          logger.warn("Failed to rename output ${outFile.path}: ${e.message}")
-        }
-      }
-  }
-}
-
-// Run rename after common assemble tasks if present
-tasks.matching { it.name == "assembleDebug" || it.name == "assembleRelease" }.configureEach {
-  finalizedBy(renameBuildOutputs)
-}
-
 val localProperties = Properties().apply {
   val localPropertiesFile = rootProject.file("local.properties")
   if (localPropertiesFile.exists()) {
@@ -76,10 +49,18 @@ android {
   signingConfigs {
     create("release") {
       val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
-      storeFile = file(keystorePath)
-      storePassword = System.getenv("STORE_PASSWORD")
-      keyAlias = "upload"
-      keyPassword = System.getenv("KEY_PASSWORD")
+      val keystoreFile = file(keystorePath)
+      if (keystoreFile.exists() && !System.getenv("STORE_PASSWORD").isNullOrBlank() && !System.getenv("KEY_PASSWORD").isNullOrBlank()) {
+        storeFile = keystoreFile
+        storePassword = System.getenv("STORE_PASSWORD")
+        keyAlias = "upload"
+        keyPassword = System.getenv("KEY_PASSWORD")
+      } else {
+        storeFile = file("${rootDir}/debug.keystore")
+        storePassword = "android"
+        keyAlias = "androiddebugkey"
+        keyPassword = "android"
+      }
     }
     create("debugConfig") {
       storeFile = file("${rootDir}/debug.keystore")

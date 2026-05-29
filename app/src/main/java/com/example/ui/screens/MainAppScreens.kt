@@ -36,11 +36,11 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.core.content.ContextCompat
-import com.example.config.Config
-import com.example.data.database.FormQuestionEntity
-import com.example.data.database.SurveyEntity
-import com.example.ui.theme.*
-import com.example.ui.viewmodel.SurveyViewModel
+import com.nlud.civilagesurvey.config.Config
+import com.nlud.civilagesurvey.data.database.FormQuestionEntity
+import com.nlud.civilagesurvey.data.database.SurveyEntity
+import com.nlud.civilagesurvey.ui.theme.*
+import com.nlud.civilagesurvey.ui.viewmodel.SurveyViewModel
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
@@ -3896,3 +3896,4 @@ fun OptionsScreen(
         Spacer(modifier = Modifier.height(20.dp))
     }
 }
+
