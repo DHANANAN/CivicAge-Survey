@@ -1,0 +1,6 @@
+{
+  "name": "CivicAge Survey (CAS)",
+  "description": "Center for Urban Planning",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
