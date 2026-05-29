@@ -7,6 +7,33 @@ plugins {
   alias(libs.plugins.roborazzi)
 }
 
+// Task: After assemble, copy/rename APK/AAB outputs to include versionName in filename
+val renameBuildOutputs = tasks.register("renameBuildOutputs") {
+  doLast {
+    val verName = android.defaultConfig.versionName ?: "v"
+    val outputsDir = file("$buildDir/outputs")
+    if (!outputsDir.exists()) return@doLast
+
+    outputsDir.walkTopDown().filter { it.isFile && (it.extension == "apk" || it.extension == "aab") }
+      .forEach { outFile ->
+        try {
+          val parent = outFile.parentFile
+          val base = outFile.nameWithoutExtension
+          val newName = "${base}-${verName}.${outFile.extension}"
+          val dest = File(parent, newName)
+          outFile.copyTo(dest, overwrite = true)
+        } catch (e: Exception) {
+          logger.warn("Failed to rename output ${outFile.path}: ${e.message}")
+        }
+      }
+  }
+}
+
+// Run rename after common assemble tasks if present
+tasks.matching { it.name == "assembleDebug" || it.name == "assembleRelease" }.configureEach {
+  finalizedBy(renameBuildOutputs)
+}
+
 val localProperties = Properties().apply {
   val localPropertiesFile = rootProject.file("local.properties")
   if (localPropertiesFile.exists()) {
