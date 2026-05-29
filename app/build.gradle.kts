@@ -26,11 +26,11 @@ fun String.asBuildConfigString(): String =
   "\"" + replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
 android {
-  namespace = "com.nlud.civilagesurvey"
-  compileSdk { version = release(36) { minorApiLevel = 1 } }
+  namespace = "com.civilagesurvey.app"
+  compileSdk = 36
 
   defaultConfig {
-    applicationId = "com.nlud.civilagesurvey"
+    applicationId = "com.civilagesurvey.app"
     minSdk = 24
     targetSdk = 36
     versionCode = 1
@@ -80,7 +80,7 @@ android {
     debug {
       val debugKeystore = file("${rootDir}/debug.keystore")
       if (debugKeystore.exists()) {
-        signingConfig = signingConfigs.getByName("debugConfig")
+    // signingConfig = signingConfigs.getByName("debugConfig")
       }
     }
   }
@@ -122,11 +122,11 @@ dependencies {
   implementation(libs.androidx.room.runtime)
   implementation(libs.coil.compose)
   implementation(libs.converter.moshi)
-  implementation(libs.firebase.ai)
   implementation(libs.firebase.analytics)
-  implementation(libs.firebase.auth)
-  implementation(libs.firebase.firestore)
-  implementation(libs.firebase.storage)
+  // implementation(libs.firebase.ai)
+  // implementation(libs.firebase.auth)
+  // implementation(libs.firebase.firestore)
+  // implementation(libs.firebase.storage)
   implementation(libs.kotlinx.coroutines.android)
   implementation(libs.kotlinx.coroutines.core)
   implementation(libs.kotlinx.coroutines.play.services)

@@ -7,9 +7,9 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:777856548247:android:47a93a9ba35b99422398d2",
+        "mobilesdk_app_id": "1:777856548247:android:6f30f378b21933952398d2",
         "android_client_info": {
-          "package_name": "com.nlud.civilagesurvey"
+          "package_name": "com.civilagesurvey.app"
         }
       },
       "oauth_client": [],
