@@ -8,6 +8,7 @@ object Config {
     val DEFAULT_FORM_ID: String = BuildConfig.DEFAULT_FORM_ID
     val FORMS_WEB_APP_URL: String = BuildConfig.FORMS_WEB_APP_URL
     val FORMS_SHARED_SECRET: String = BuildConfig.FORMS_SHARED_SECRET
+    const val GOOGLE_WEB_CLIENT_ID = "777856548247-vrksj3qs9vj8fmm7up1lf22ln2dkjl5i.apps.googleusercontent.com"
 
     const val ADMIN_ROLE = "Admin/Test Admin"
     const val FIELD_SURVEYOR_ROLE = "Field Surveyor"

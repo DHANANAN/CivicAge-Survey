@@ -7,11 +7,9 @@ import androidx.lifecycle.viewModelScope
 import com.civilagesurvey.app.audio.AudioRecorderHelper
 import com.civilagesurvey.app.audio.TextToSpeechHelper
 import com.civilagesurvey.app.config.Config
-import com.civilagesurvey.app.data.database.FormQuestionEntity
-import com.civilagesurvey.app.data.database.SurveyEntity
-import com.civilagesurvey.app.data.database.UserProfileEntity
+import com.civilagesurvey.app.data.database.*
 import com.civilagesurvey.app.data.model.DefaultQuestions
-import com.civilagesurvey.app.data.repository.SurveyRepository
+import com.civilagesurvey.app.data.repository.*
 import com.civilagesurvey.app.location.LocationHelper
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
@@ -26,13 +24,15 @@ import java.util.*
 
 class SurveyViewModel(
     application: Application,
-    private val repository: SurveyRepository
+    private val repository: SurveyRepository,
+    private val googleFormsRepository: GoogleFormsRepository
 ) : AndroidViewModel(application) {
 
     private val context = application.applicationContext
     private val locationHelper = LocationHelper(context)
     private val audioRecorder = AudioRecorderHelper(context)
     private var ttsHelper = TextToSpeechHelper(context)
+    private val googleFormsAuthManager = GoogleFormsAuthManager(context)
 
     // User Session
     val surveyorPhone = MutableStateFlow("")
@@ -43,6 +43,13 @@ class SurveyViewModel(
     val isNetworkOnline = MutableStateFlow(true)
     val authStatusMessage = MutableStateFlow("")
     val activeUserUid = MutableStateFlow("")
+
+    // Google Forms State
+    val googleFormSources: StateFlow<List<GoogleFormSourceEntity>> = repository.allGoogleFormSources
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    
+    val mirrorResult = MutableStateFlow<GoogleFormsRepository.MirrorResult?>(null)
+    val isFetchingForm = MutableStateFlow(false)
 
     // Options and customization
     val appearanceMode = MutableStateFlow("Professional Light")
@@ -65,6 +72,19 @@ class SurveyViewModel(
 
     val activeQuestions: StateFlow<List<FormQuestionEntity>> = repository.allQuestions
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Dashboard Stats
+    val completedCount = allSurveys.map { it.count { s -> s.status == "COMPLETED" } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+    
+    val draftCount = allSurveys.map { it.count { s -> s.status == "DRAFT" } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+    
+    val syncedCount = allSurveys.map { it.count { s -> s.isSynced } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+    
+    val offlineCount = allSurveys.map { it.count { s -> !s.isSynced } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
     // Active Survey Drafting State
     val activeSurveyUid = MutableStateFlow<String?>(null)
@@ -161,6 +181,22 @@ class SurveyViewModel(
         signInOrSignUp(email, "", fullName, surveyorCode, mobileNumber, false) { _, _ -> }
     }
 
+    fun addGoogleForm(url: String) {
+        viewModelScope.launch {
+            isFetchingForm.value = true
+            // In a production app, we would use googleFormsAuthManager to get a fresh token
+            // For now, we simulate the authorization success if the user is "logged in"
+            val dummyAccessToken = "ya29.A0ARrdaM..."
+            val result = googleFormsRepository.fetchAndMirrorForm(url, dummyAccessToken, surveyorId.value)
+            mirrorResult.value = result
+            isFetchingForm.value = false
+        }
+    }
+
+    fun resetMirrorResult() {
+        mirrorResult.value = null
+    }
+
     fun logout() {
         surveyorEmail.value = ""
         surveyorName.value = ""
@@ -203,6 +239,32 @@ class SurveyViewModel(
             surveyorEmail = surveyorEmail.value,
             surveyorPhone = surveyorPhone.value,
             surveyorRole = userRole.value
+        )
+
+        viewModelScope.launch {
+            repository.insertSurvey(initialSurvey)
+            activeSurveyUid.value = uid
+            activeSurvey.value = initialSurvey
+        }
+
+        return uid
+    }
+
+    fun startNewSurveyForForm(formId: String): String {
+        val timestamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.getDefault()).format(Date())
+        val randomSuffix = (1000..9999).random()
+        val uid = "CAS-GF-$timestamp-$randomSuffix"
+
+        currentQuestionIndex.value = 0
+        interviewAnswers.value = emptyMap()
+
+        val initialSurvey = SurveyEntity(
+            surveyUid = uid,
+            createdBy = surveyorId.value,
+            status = "DRAFT",
+            linkedGoogleFormId = formId,
+            surveyorId = surveyorId.value,
+            surveyorName = surveyorName.value
         )
 
         viewModelScope.launch {
@@ -296,6 +358,10 @@ class SurveyViewModel(
         }
     }
 
+    fun setQuestionIndex(index: Int) {
+        currentQuestionIndex.value = index
+    }
+
     fun saveInterviewAnswer(index: Int, text: String) {
         val current = interviewAnswers.value.toMutableMap()
         current[index] = text
@@ -352,6 +418,13 @@ class SurveyViewModel(
                 transcriptExportPath = txtFile.absolutePath
             )
             repository.insertSurvey(finalSurvey)
+            
+            // Try to sync to Firestore
+            val success = repository.syncSurveyToFirestore(finalSurvey)
+            if (success) {
+                repository.insertSurvey(finalSurvey.copy(isSynced = true, lastSyncedAt = System.currentTimeMillis()))
+            }
+
             withContext(Dispatchers.Main) {
                 activeSurvey.value = finalSurvey
             }

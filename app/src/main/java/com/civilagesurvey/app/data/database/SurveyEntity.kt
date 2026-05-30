@@ -126,7 +126,30 @@ data class FormQuestionEntity(
     val section: String,
     val questionText: String,
     val questionAudioPath: String? = null,
-    val type: String, // "single_choice", "text" etc.
+    val type: String, // "single_choice", "text", "checkbox", "dropdown", "scale", "date", "time"
     val optionsJson: String, // JSON Array of options
-    val isRequired: Boolean = true
+    val isRequired: Boolean = true,
+    val order: Int = 0,
+    val isUnsupported: Boolean = false,
+    val unsupportedReason: String? = null
 )
+
+@Entity(tableName = "google_form_sources")
+data class GoogleFormSourceEntity(
+    @PrimaryKey
+    val extractedFormId: String,
+    val originalUrl: String,
+    val normalizedUrl: String,
+    val formTitle: String,
+    val formDescription: String?,
+    val responderUri: String,
+    val createdBy: String,
+    val fetchedAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis(),
+    val sourceType: String = "GOOGLE_FORMS",
+    val mirrorStatus: String = "FETCHED", // FETCHED, NEEDS_PERMISSION, UNSUPPORTED, ERROR
+    val questionCount: Int = 0,
+    val supportedQuestionCount: Int = 0,
+    val unsupportedQuestionCount: Int = 0
+)
+

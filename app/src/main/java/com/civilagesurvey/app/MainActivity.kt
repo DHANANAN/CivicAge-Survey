@@ -9,6 +9,8 @@ import androidx.compose.runtime.getValue
 import androidx.lifecycle.ViewModelProvider
 import com.civilagesurvey.app.data.database.AppDatabase
 import com.civilagesurvey.app.data.repository.SurveyRepository
+import com.civilagesurvey.app.data.repository.GoogleFormsRepository
+import com.civilagesurvey.app.data.api.GoogleFormsApiService
 import com.civilagesurvey.app.ui.screens.MainSurveyApp
 import com.civilagesurvey.app.ui.theme.MyApplicationTheme
 import com.civilagesurvey.app.ui.viewmodel.SurveyViewModel
@@ -20,8 +22,12 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         val database = AppDatabase.getDatabase(applicationContext)
-        val repository = SurveyRepository(database.surveyDao())
-        val viewModelFactory = SurveyViewModelFactory(application, repository)
+        val surveyDao = database.surveyDao()
+        val repository = SurveyRepository(surveyDao)
+        val googleFormsApiService = GoogleFormsApiService.create()
+        val googleFormsRepository = GoogleFormsRepository(surveyDao, googleFormsApiService)
+        
+        val viewModelFactory = SurveyViewModelFactory(application, repository, googleFormsRepository)
         val viewModel = ViewModelProvider(this, viewModelFactory)[SurveyViewModel::class.java]
 
         setContent {

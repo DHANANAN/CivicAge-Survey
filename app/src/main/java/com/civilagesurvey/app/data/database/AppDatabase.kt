@@ -10,7 +10,8 @@ import androidx.room.RoomDatabase
         SurveyEntity::class,
         UserProfileEntity::class,
         SyncLogEntity::class,
-        FormQuestionEntity::class
+        FormQuestionEntity::class,
+        GoogleFormSourceEntity::class
     ],
     version = 1,
     exportSchema = false

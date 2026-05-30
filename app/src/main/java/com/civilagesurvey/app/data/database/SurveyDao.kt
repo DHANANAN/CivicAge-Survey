@@ -52,4 +52,17 @@ interface SurveyDao {
 
     @Query("DELETE FROM form_questions")
     suspend fun clearAllQuestions()
+
+    // Google Form Sources
+    @Query("SELECT * FROM google_form_sources ORDER BY updatedAt DESC")
+    fun getAllGoogleFormSources(): Flow<List<GoogleFormSourceEntity>>
+
+    @Query("SELECT * FROM google_form_sources WHERE extractedFormId = :formId")
+    suspend fun getGoogleFormSourceById(formId: String): GoogleFormSourceEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertGoogleFormSource(source: GoogleFormSourceEntity)
+
+    @Delete
+    suspend fun deleteGoogleFormSource(source: GoogleFormSourceEntity)
 }
