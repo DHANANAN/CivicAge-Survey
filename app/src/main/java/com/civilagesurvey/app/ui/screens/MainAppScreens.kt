@@ -67,7 +67,7 @@ fun MainSurveyApp(viewModel: SurveyViewModel) {
                 NavigationBar(containerColor = MaterialTheme.colorScheme.surface, tonalElevation = 8.dp) {
                     val items = listOf(
                         Triple("Home", Icons.Default.Dashboard, "home"),
-                        Triple("Surveys", Icons.Default.Assignment, "surveys"),
+                        Triple("Surveys", Icons.AutoMirrored.Filled.Assignment, "surveys"),
                         Triple("Records", Icons.Default.History, "records"),
                         Triple("Export", Icons.Default.CloudUpload, "export"),
                         Triple("Settings", Icons.Default.Settings, "settings"),
@@ -191,7 +191,6 @@ fun LoginScreen(viewModel: SurveyViewModel, onLogin: () -> Unit) {
 
 @Composable
 fun HomeScreen(viewModel: SurveyViewModel, onNavigate: (String) -> Unit) {
-    val name by viewModel.surveyorName.collectAsState()
     val allSurveys by viewModel.allSurveys.collectAsState()
     val googleForms by viewModel.googleFormSources.collectAsState()
     
@@ -238,7 +237,7 @@ fun HomeScreen(viewModel: SurveyViewModel, onNavigate: (String) -> Unit) {
                 QuickActionCard("Sync Data", Icons.Default.Sync, { onNavigate("export") }, Modifier.weight(1f))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                QuickActionCard("Consent Records", Icons.Default.FactCheck, { onNavigate("records") }, Modifier.weight(1f))
+                QuickActionCard("Consent Records", Icons.AutoMirrored.Filled.FactCheck, { onNavigate("records") }, Modifier.weight(1f))
                 QuickActionCard("Admin Dashboard", Icons.Default.AdminPanelSettings, { onNavigate("settings") }, Modifier.weight(1f))
             }
         }
@@ -474,7 +473,13 @@ fun ConsentScreen(viewModel: SurveyViewModel, formId: String? = null, onNext: ()
                 if (formId != null) {
                     viewModel.startNewSurveyForForm(formId)
                 } else {
-                    viewModel.startNewSurvey(true, true, true, true, true)
+                    viewModel.startNewSurvey(
+                        hasPhotoConsent = true,
+                        hasAudioConsent = true,
+                        hasGeoConsent = true,
+                        hasDataConsent = true,
+                        hasWithdrawalRight = true
+                    )
                 }
                 onNext() 
             } 
@@ -724,7 +729,6 @@ fun ExportScreen(viewModel: SurveyViewModel) {
     val surveys by viewModel.allSurveys.collectAsState()
     val syncedCount by viewModel.syncedCount.collectAsState()
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     
     val pendingSyncCount = surveys.size - syncedCount
 
@@ -909,7 +913,7 @@ fun GoogleFormTakingScreen(viewModel: SurveyViewModel, formId: String, onExit: (
                         Text(q.section, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
                     }
                     IconButton(onClick = { viewModel.speakAloud(q.questionText) }) {
-                        Icon(Icons.Default.VolumeUp, contentDescription = "Read Aloud", tint = MaterialTheme.colorScheme.primary)
+                        Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = "Read Aloud", tint = MaterialTheme.colorScheme.primary)
                     }
                 }
                 
