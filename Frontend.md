@@ -3,326 +3,212 @@
 ## CivicAge Survey (CAS) Frontend Specification
 
 **Project:** Smart Cities, Silent Citizens - ICSSR Major Research Project 2025-26  
-**App:** CivicAge Survey (CAS)  
 **Platform:** Native Android  
-**Primary users:** Field investigators, supervisors, project administrators, transcribers, and analysts  
-**Research participants:** Oldest old persons aged 75+, caregivers, institutional representatives, experts, planners, ICCC operators, NGO workers, geriatricians, and legal scholars
-
-This document converts the full ICSSR data collection framework into a native Android frontend workflow.
+**Purpose:** Convert all ICSSR data collection tools into a safe, accessible, multilingual fieldwork workflow for the oldest old population and related stakeholders.
 
 ---
 
-## 1. Frontend Goals
+## 1. Core UI Principles
 
-The app must support fieldwork with very old participants while also helping field investigators follow strict research ethics. The interface should not feel like a fast commercial survey app. It should feel slow, clear, readable, consent-based, and safe.
-
-Core goals:
-
-1. Reduce participant fatigue.
-2. Make consent impossible to skip.
-3. Keep every instrument modular.
-4. Support read-aloud administration.
-5. Work offline during fieldwork.
-6. Use large fonts and simple navigation.
-7. Avoid hidden validation errors.
-8. Support multiple city languages.
-9. Integrate QA checks before final sync/export.
-10. Make the app usable by trained field investigators, not by participants directly.
+1. **Slow by design:** The app must support read-aloud administration and should never rush an oldest old participant.
+2. **Large and readable:** Use minimum 18sp for OOP-facing question text, 16sp minimum elsewhere, high contrast, and large tap targets.
+3. **Consent-first:** No instrument can open until the correct consent workflow is completed and locked.
+4. **One major action per screen:** Especially for OOP questionnaire, consent, and fatigue-sensitive modules.
+5. **Offline-first:** Drafts, consent, answers, observation notes, and audio can be saved locally and synced later.
+6. **Research ethics visible:** Every screen should make it easy to pause, skip, withdraw, or end the session.
+7. **City-language ready:** All instruments marked “all cities” must be available in language-adapted versions.
 
 ---
 
-## 2. App Information Architecture
+## 2. Main App Navigation
 
-### 2.1 Main bottom navigation
+```text
+Login
+  -> Home Dashboard
+    -> Instruments
+    -> Records
+    -> Sync / Export
+    -> QA Queue
+    -> Settings
+    -> Profile
+```
+
+Recommended bottom tabs:
 
 ```text
 Home | Instruments | Records | Sync | QA | Settings | Profile
 ```
 
-### 2.2 Home dashboard cards
+Home cards:
 
 ```text
-Total Records
-Pending Drafts
-Completed Sessions
-Pending Sync
-Pending QA
-Audio Pending Deletion
-City Assignment
-Today’s Fieldwork Plan
-```
-
-### 2.3 Instrument launcher
-
-```text
-Start New Session
-  -> Select City
-  -> Select Stakeholder
-  -> Select Consent Type
-  -> Complete Consent
-  -> Select Instrument
-  -> Run Instrument
-  -> Session Close
-  -> FI Observation / Reflexivity Log
-  -> Save Draft or Complete
+Completed Sessions | Drafts | Pending Sync | Pending QA | Audio Pending Deletion | City Assignment
 ```
 
 ---
 
-## 3. Native Android UI Standards
+## 3. Consent Workflows
 
-### 3.1 Visual style
-
-| Element | Standard |
-|---|---|
-| Body text | Minimum 18sp for read-aloud question screen; 16sp minimum elsewhere. |
-| Question text | 20sp to 22sp, bold only for key terms. |
-| Response options | Large tap targets, minimum 48dp height, preferably 56dp. |
-| Buttons | Full-width primary buttons at bottom. |
-| Colour | High contrast. Avoid pale grey text. |
-| Icons | Use simple icons only where they clarify meaning. |
-| Screen density | One major question per screen for OOP tools. |
-| Error messages | Plain language, not technical. |
-
-### 3.2 Interaction rules
-
-- Use `Next`, `Back`, `Pause`, `Save Draft`, and `End Session` buttons consistently.
-- Avoid swipe-only navigation.
-- Always show progress by section, not by raw question count.
-- Use confirmation dialogs before ending or submitting a session.
-- Never auto-submit after the final question without FI review.
-
----
-
-## 4. Field Investigator Workflow
-
-### 4.1 Login screen
-
-Fields:
+### 3.1 Consent selector
 
 ```text
-Full Name
-Email
-Surveyor ID
-City Assignment
-Role
+Select consent type:
+[ ] Written Consent - Oldest Old Participant
+[ ] Oral Consent - Low Literacy / Cognitive Impairment
+[ ] Institutional NOC - Old Age Home / Community Organisation
+[ ] Expert / Key Informant Consent
 ```
 
-Validation:
-
-- Email must be valid.
-- Surveyor ID must match assigned city prefix where possible.
-- App should display the user role after login.
-
-### 4.2 Home screen quick actions
-
-```text
-Start OOP Questionnaire
-Start OOP Interview
-Start Caregiver Tool
-Start Expert / Key Informant Tool
-Start Observation
-Start FGD
-Start Doctrinal Review
-Continue Draft
-Open QA Queue
-Sync Pending Records
-```
-
----
-
-## 5. Consent Workflows
-
-Consent must be the first active workflow for every participant or institution.
-
-### 5.1 Consent selector
-
-```text
-Who is giving consent?
-  [ ] Oldest Old Participant - Written Consent
-  [ ] Oldest Old Participant - Oral Consent
-  [ ] Institution / Old Age Home / Community Organisation - NOC
-  [ ] Expert / Key Informant
-```
-
-### 5.2 Written consent - OOP
+### 3.2 Written consent - OOP
 
 Screens:
 
-1. Study title and field investigator introduction.
+1. Study title and investigator introduction.
 2. What the study is about.
 3. What the participant will be asked to do.
 4. Privacy and participant code explanation.
 5. Audio recording choice.
-6. Risks and right to skip.
+6. Minimal risk, right to skip, and right to stop.
 7. Voluntary participation and withdrawal rights.
-8. Signature / thumb impression capture.
-9. Consent summary and lock.
+8. Signature / left thumb impression capture.
+9. Final consent review and lock.
 
-Fields:
+Required fields:
 
 ```text
 Participant Code
 Age
 Gender
 City
-Consent Language
-Signature or Left Thumb Impression
+Preferred Language
 Consent to Audio Recording: Yes / No
 Consent to Geo-tagging: Yes / No
-Field Investigator Name and Code
+Signature / Left Thumb Impression
+Field Investigator Code
 Consent Timestamp
 ```
 
-### 5.3 Oral consent - low literacy / cognitive impairment version
+### 3.3 Oral consent
 
-Screens:
-
-1. Local greeting and plain-language introduction.
-2. Read-aloud script.
-3. Permission question: “Do I have your permission to ask questions today?”
-4. Verbal assent capture.
-5. Proxy consent marker if required.
-6. Audio recording choice for interview.
-7. Consent lock.
+Use for low literacy or cognitive impairment situations. The app should show the oral script in the selected language and allow audio recording of verbal assent.
 
 Controls:
 
 ```text
 Start Assent Recording
 Stop Assent Recording
-Mark Verbal Yes
-Mark No / Confused / Reluctant
+Participant says YES
+Participant says NO / unclear / reluctant
 Do Not Proceed
+Proxy Consent Required: Yes / No
 ```
 
-Rules:
+Rule:
 
-- If participant says “No”, appears confused, or appears reluctant, the app must show `Do Not Proceed`.
-- Oral assent audio ID must be attached to the consent record.
-- Proxy consent must be flagged, not hidden in notes.
+```text
+If the participant refuses, appears confused, or remains unclear after one repeat, the app must block data collection.
+```
 
-### 5.4 Institutional NOC
+### 3.4 Institutional NOC
 
 Screens:
 
-1. Institution details.
-2. Permission scope.
-3. Conditions.
-4. Authorised signatory.
-5. Institutional seal/photo/document attachment, if permitted.
-6. Anonymisation choice.
-
-Institution NOC must not unlock individual participant tools unless individual participant consent is separately completed.
-
-### 5.5 Expert / key informant consent
-
-Applicable to:
-
 ```text
-MoHUA / SPV officials
-Urban planners
-Interface designers
-ICCC operators
-Municipal officials
-Old age home administrators
-Digital literacy trainers
-NGO representatives
-Geriatricians
-Mental health professionals
-Legal scholars
+Institution details
+Permission scope
+Conditions
+Authorised signatory details
+Institutional anonymisation confirmation
+NOC document/photo attachment if permitted
 ```
 
-Fields:
+Institutional NOC does not replace individual participant consent.
+
+### 3.5 Expert / key informant consent
+
+Applies to MoHUA/SPV officials, planners, ICCC operators, municipal officials, OAH administrators, digital literacy trainers, NGO representatives, geriatricians, mental health professionals, and legal scholars.
+
+Default setting:
 
 ```text
-Name optional
-Designation
-Organisation
-City
-Audio Recording Consent
-Permission to Name Institution: Yes / No
-Permission to Quote with Attribution: Yes / No
-Signature
-Interview Code
+Identity anonymised unless explicit written naming permission is given.
 ```
-
-Default setting: anonymise identity and institutional affiliation unless explicit written permission is recorded.
 
 ---
 
-## 6. Questionnaire Modules - SQ-OOP-v1.0
+## 4. Instrument Launcher
 
-The oldest old questionnaire must be read aloud by the field investigator. Self-administration should not be offered for OOP respondents.
+```text
+Start New Session
+  -> Select City
+  -> Select Stakeholder
+  -> Select Participant / Institution Code
+  -> Complete or verify consent
+  -> Select Instrument
+  -> Run Instrument
+  -> Complete FI log / reflexivity log
+  -> Save Draft or Submit for QA
+```
 
-### 6.1 Opening metadata screen
+Instrument categories:
 
-Fields:
+```text
+Consent Forms
+OOP Structured Questionnaire
+OOP Semi-Structured Interview
+Expert / Key Informant Interviews
+Old Age Home Administrator Interview
+Digital Literacy Trainer Interview
+NGO / Geriatrician / Legal Expert Interviews
+Caregiver Questionnaire + Interview
+Field Observation / Shadowing
+Focus Group Discussion
+Doctrinal Template
+QA Checklists
+Annexures
+```
+
+---
+
+## 5. SQ-OOP-v1.0 Questionnaire UI
+
+Administration mode:
+
+```text
+Read aloud by Field Investigator. Self-administration is not appropriate for OOP participants.
+```
+
+### 5.1 Session metadata
 
 ```text
 Participant ID
-Date of Interview
+Date
 City
 Start Time
+End Time
 Field Investigator Code
 Location Type: Community-dwelling / OAH-Government / OAH-Private / Other
 Neighbourhood / Ward
 Break Given at 25 Minutes: Yes / No
 ```
 
-### 6.2 Section A - Socio-demographic profile
+### 5.2 Sections
 
-UI type: mostly single-choice and short text.
+| Section | Content | UI requirement |
+|---|---|---|
+| A | Socio-demographic profile | Single-choice, short text, skip option for fatigue-sensitive questions. |
+| B | Digital device ownership and exposure | Show device reference cards; do not assume “smartphone” knowledge. |
+| C | Smart City Mission services | City-specific service cards and usage grid. |
+| D | Digital Anxiety Scale | 5-point Likert scale with read-aloud response card. |
+| E1 | Digital Dependency Index | Frequency and dependency questions. |
+| E2 | Dignity Perception Scale | 5-point Likert; reverse scoring only in analysis. |
+| F | Social isolation and intergenerational impact | Frequency and perception items. |
+| G | Digital literacy programme and welfare schemes | Programme exposure and scheme awareness. |
+| H | FI observation log | Completed after session, not in front of participant. |
 
-Topics:
+### 5.3 City-specific Section C service examples
 
-```text
-Age
-Gender
-Mother tongue / primary language
-Education
-Living arrangement
-Monthly income source
-Household income - optional / skippable to avoid fatigue
-Duration of residence in city
-General health - optional / skippable
-Sensory / mobility / memory indicators - optional / skippable
-Caregiving support - optional / skippable
-```
-
-Design requirement:
-
-- Use “Prefer not to say” wherever sensitive.
-- Add `S - Skipped` button with reason.
-- Do not force income or health answers.
-
-### 6.3 Section B - Digital device ownership and exposure
-
-UI requirement:
-
-- Show digital device reference card with pictures of basic phone, smartphone, computer, tablet, kiosk.
-- Do not assume the participant understands “smartphone”.
-
-Topics:
-
-```text
-Personal phone ownership
-Phone use patterns
-Who operates devices for participant
-Computer / laptop / tablet access
-Frequency of independent digital use
-Past technology exposure
-Confidence in using smartphone or kiosk
-Internet connection at home / old age home
-```
-
-### 6.4 Section C - Smart City Mission service awareness and usage
-
-City-specific service cards must be loaded before field deployment.
-
-Example service mapping:
-
-| City | Example service cards |
+| City | Service cards to configure before fieldwork |
 |---|---|
 | New Delhi | Delhi Metro app, Delhi One app, EDMC e-services, Mohalla Clinic app, smart parking. |
 | Srinagar | Smart bus shelters, Wi-Fi hotspots, ICCC grievance portal, smart waste management. |
@@ -331,131 +217,107 @@ Example service mapping:
 | Gandhinagar | iNagar app, GIFT City infrastructure services, smart health kiosks. |
 | Indore | 311 Smart City app, BRTS digital booking, ICCC grievance system, digital waste compliance. |
 
-Service grid fields:
+Grid columns:
 
 ```text
-Heard of it?
-Tried to use it?
-Used successfully alone?
-Used with someone’s help?
-Never used or gave up?
-```
-
-Additional items:
-
-```text
-Primary reason for failed use
-Help needed in past month
-Online-only denial of service
-Response after denial
-Missed / delayed service in past six months
-Avoided public place due to digital barrier
-Paid middleman / cyber cafe for free civic service
+Heard of it? | Tried to use it? | Used successfully alone? | Used with help? | Never used / gave up?
 ```
 
 ---
 
-## 7. Remaining OOP Questionnaire Sections
+## 6. Break Alerts and Fatigue Detection
 
-Although the immediate frontend build may start with Sections A-C, the final CAS workflow must support all SQ-OOP sections.
+### 6.1 Mandatory 25-minute break
 
-| Section | Module name | UI type |
-|---|---|---|
-| D | Digital Anxiety Scale | 5-point Likert with read-aloud scale card. |
-| E1 | Digital Dependency Frequency Index | Single-choice frequency and dependency items. |
-| E2 | Dignity Perception Scale | 5-point Likert with reverse scoring in analysis only. |
-| F | Social Isolation and Intergenerational Impact | Frequency and perception items. |
-| G | Digital Literacy Programme Exposure and Welfare Scheme Awareness | Yes/no, multiple-choice, programme exposure. |
-| H | FI Observation Log | Completed by FI after session, not in front of participant. |
+Trigger at 25 minutes for SQ-OOP.
 
----
-
-## 8. Break Alerts and Fatigue Detection
-
-### 8.1 Mandatory break alert
-
-Trigger:
-
-```text
-At 25 minutes from session start for SQ-OOP.
-```
-
-UI copy:
+Popup:
 
 ```text
 It has been 25 minutes. Please pause and offer the participant a break.
 
-Options:
 [Break Accepted]
 [Participant Wants to Continue]
 [Pause Session]
 [End Session]
 ```
 
-### 8.2 Maximum duration warning
+### 6.2 Fatigue flag button
 
-Trigger:
+Visible on all OOP tools:
 
 ```text
-At 55 minutes for SQ-OOP.
-At 60 minutes for SSI-OOP.
-At 75 minutes for SSI-OOP hard warning.
+Participant looks tired / distressed
 ```
 
-### 8.3 Fatigue detection checklist
-
-After each section and whenever the FI taps `Participant looks tired`, show:
+Checklist:
 
 ```text
-Observed sign:
-[ ] Long silence
 [ ] Confusion
+[ ] Long silence
 [ ] Repeated re-explanation needed
-[ ] Visible distress
-[ ] Participant requests pause
-[ ] Participant looks physically tired
-[ ] Irritation / anxiety
-[ ] Hearing or visual strain
+[ ] Physical discomfort
+[ ] Emotional distress
+[ ] Hearing / visual strain
+[ ] Participant requested break
+[ ] Participant asked to stop
 ```
 
-App action:
+Actions:
 
 ```text
-Offer break -> Resume / Skip sensitive section / End session / Escalate to PI if distress persists
+Offer Break | Skip Question | End Session | Refer to PI / Supervisor
 ```
 
 ---
 
-## 9. Interview Modules
+## 7. SSI-OOP-v1.0 Interview UI
 
-### 9.1 SSI-OOP-v1.0
+Rules:
 
-Workflow:
+- Minimum 2-day gap from SQ-OOP.
+- Audio recording only if separately consented.
+- Schedule preferably 9:00 AM-12:00 PM.
+- 60-minute alert should appear.
+
+Theme screens:
 
 ```text
-Confirm 2-day gap from SQ-OOP
-Confirm consent
-Confirm audio choice
-Pre-interview checklist
-Theme 1: Life before and after digital transformation
-Theme 2: Specific experiences with smart city services
-Theme 3: Emotional experience, digital anxiety, and mental well-being
-Theme 4: Social connections, family dynamics, intergenerational bonds
-Theme 5: Rights awareness, dignity, and policy
-Closing protocol
-Post-interview reflexivity and quality log
+T1 Life before and after digital transformation
+T2 Specific experiences with smart city services
+T3 Emotional experience, digital anxiety, mental well-being
+T4 Social connections, family dynamics, intergenerational bonds
+T5 Rights awareness, dignity, and policy
 ```
 
-UI format:
+Controls:
 
-- Interview guide screen with expandable probes.
-- `Mark Asked`, `Mark Skipped`, `Add Note`, `Add Quote`, and `Flag Distress` controls.
-- Optional audio recorder only if consent exists.
-- 60-minute alert.
+```text
+Mark Asked
+Mark Skipped
+Add Note
+Add Verbatim Quote
+Flag Distress
+Pause Recording
+End Interview
+```
 
-### 9.2 Expert and key informant interviews
+Post-interview log:
 
-Tool groups:
+```text
+Dominant themes
+Notable verbatim quotes
+Digital barriers raised spontaneously? Yes / No
+FI reflexivity note
+Data quality assessment
+Follow-up or referral needed
+```
+
+---
+
+## 8. Expert, Institutional, and Stakeholder Interview UI
+
+Supported tools:
 
 ```text
 SSI-MoHUA/SPV-v1.0
@@ -469,178 +331,128 @@ SEI-Geri-v1.0
 EI-Legal-Ac-v1.0
 ```
 
-UI format:
+Common layout:
 
-- Expert profile page.
-- Consent page.
-- Interview theme pages.
-- Document request checklist.
-- Audio consent toggle.
-- Post-interview notes.
+```text
+Consent check
+Profile data
+Interview guide by theme
+Document request checklist
+Audio consent toggle
+Closing notes
+QA flag
+```
 
 ---
 
-## 10. Caregiver Module - SQ-CG + SSI-CG-v1.0
+## 9. Caregiver Tool UI
+
+Tool:
+
+```text
+SQ-CG + SSI-CG-v1.0
+```
 
 Rules:
 
-- Caregiver tool must be administered separately from OOP sessions.
-- OOP participant must not be present during caregiver interview.
+- Administer separately from the OOP participant.
+- OOP participant must not be present.
 - Caregiver must not be present during OOP interview.
 
-Workflow:
+Structured part topics:
 
 ```text
-Select linked OOP participant code
-Confirm separate consent
-Part A: Caregiver structured questionnaire
-Part B: Short semi-structured interview
-Save relationship and digital support burden indicators
-```
-
-Main structured topics:
-
-```text
-Relationship to OOP participant
+Relationship to OOP
 Frequency of digital help
 Types of digital tasks assisted
-Time spent weekly
+Weekly time burden
 Observed frustration / anxiety
 Reduced outings due to digital barriers
-Missed service or entitlement
+Missed services / benefits
 Effect on relationship
 ```
 
 ---
 
-## 11. FGD Module
+## 10. FGD UI
 
 Workflow:
 
 ```text
 Create FGD code
-Select city
-Select group type: OOP / Caregiver / Mixed
-Record venue and moderator details
-Attach individual consent records
-Run phased guide
-Capture activity outputs
+Select city and group type
+Add participant codes
+Verify individual consent for each participant
+Run phase-wise FGD guide
+Capture activity output
 Record group findings
-Complete moderator QA note
+Complete moderator note
+Submit for QA
 ```
 
-UI requirements:
+Rules:
 
-- Do not display individual names in FGD screen after consent.
-- Use participant codes only.
-- Add group note and “do not attribute to individual” warning.
-- Audio recording allowed only if all participants consent.
+- Use participant codes only during FGD recording.
+- Audio is allowed only if all participants consent.
+- Do not attribute sensitive statements to named individuals.
 
 ---
 
-## 12. Observation and Shadowing Module - FO-OOP-v1.0
+## 11. Field Observation / Shadowing UI
+
+Tool:
+
+```text
+FO-OOP-v1.0
+```
 
 Workflow:
 
 ```text
-Separate observation consent
-Confirm real destination and real purpose
+Separate shadowing consent
+Real destination and real purpose confirmation
 Pre-observation checklist
-Route and physical mobility observation
+Route and mobility observation
 Digital interaction log
 Staff interaction log
 Accessibility heuristic
-Session close and FI reflection
+Session close
 ```
 
-Controls:
+Ethics warning shown before start:
 
 ```text
-Start Timer
-Add Interface Encounter
-Add Staff Interaction
-Mark Participant Distress
-Mark FI Intervention
-End Observation
-```
-
-Ethical alert:
-
-```text
-The FI must not intervene unless the participant asks to stop or there is physical danger.
+Do not intervene, suggest, correct, or guide unless the participant asks to stop or faces physical danger.
 ```
 
 ---
 
-## 13. Doctrinal Template Module
+## 12. Doctrinal Template UI
 
-Used by PI/RA, not field investigators.
+Used by PI/RA.
 
-Workflow:
-
-```text
-Select document type
-Add citation/source details
-Summarise legal/policy provision
-Map to research objective
-Add elder-rights relevance
-Add smart-city governance relevance
-Add accessibility obligation
-Add synthesis memo
-```
-
-Document types:
+Fields:
 
 ```text
-Statute
-Policy
-Scheme
-Guideline
-Court judgment
-Government report
-International framework
-Municipal document
-SPV document
+Document type
+Jurisdiction
+Citation / source
+Summary
+Digital exclusion relevance
+Elder-rights relevance
+Smart-city governance relevance
+Accessibility obligation
+Research objective mapping
+Synthesis memo
 ```
 
 ---
 
-## 14. QA Module
+## 13. Multilingual Support
 
-QA should be visible to supervisors and admins.
+Required language adaptation:
 
-QA queue filters:
-
-```text
-City
-Field Investigator
-Instrument Type
-Consent Missing
-Audio Pending Deletion
-Break Not Recorded
-Fatigue Flag
-Transcript Pending Review
-Low Data Reliability
-Protocol Violation
-```
-
-QA checklist actions:
-
-```text
-Approve
-Return for clarification
-Escalate to PI
-Exclude from analysis
-Mark withdrawal processed
-```
-
----
-
-## 15. Multilingual Adaptation
-
-### 15.1 Required city languages
-
-| City | Primary app language support |
+| City | Language support |
 |---|---|
 | New Delhi | Hindi, English, Urdu optional. |
 | Srinagar | Kashmiri, Urdu, Hindi, English. |
@@ -649,9 +461,7 @@ Mark withdrawal processed
 | Gandhinagar | Gujarati, Hindi, English. |
 | Indore | Hindi, English. |
 
-### 15.2 Language implementation
-
-Store strings in Android resources:
+Android resource folders:
 
 ```text
 res/values/strings.xml
@@ -662,8 +472,6 @@ res/values-gu/strings.xml
 res/values-miz/strings.xml
 res/values-ks/strings.xml
 ```
-
-### 15.3 Language metadata
 
 Every record must store:
 
@@ -678,117 +486,63 @@ Every record must store:
 
 ---
 
-## 16. Accessibility Features
-
-### 16.1 Participant accessibility
+## 14. Accessibility Features
 
 - Large print mode.
-- Read-aloud question mode.
-- Audio playback of consent script.
+- Read-aloud mode.
+- Consent audio playback.
 - Visual response cards.
-- High contrast theme.
-- Thumb-print signing.
+- High contrast screen mode.
+- Thumb impression capture.
 - Proxy consent flag.
-- Skip option on sensitive questions.
-- No small checkboxes for OOP screens; use large cards.
-
-### 16.2 Field investigator accessibility
-
-- Offline drafts.
-- Resume interrupted session.
-- Section-level progress.
-- Protocol warnings.
-- In-app glossary of tool codes.
-- City-specific service cards.
-- Quick distress protocol.
+- Pause, skip, and withdraw buttons.
+- No tiny checkboxes for OOP screens.
+- All sensitive questions must allow `S - skipped` with reason.
 
 ---
 
-## 17. Thumb-print Signing
+## 15. QA Queue UI
 
-Screen requirements:
+Filters:
 
 ```text
-Participant Code
-Consent Type
-Signature / Thumb Impression Canvas
-Mark type: Signature / Left Thumb Impression / Unable to sign
-Witness required: Yes / No
-Field Investigator confirmation
-Timestamp
+City
+Field Investigator
+Tool Code
+Consent Missing
+Break Missing
+Same-day SQ + SSI Violation
+Audio Pending Deletion
+Transcript Pending Review
+Distress Flag
+Low Data Reliability
 ```
 
-Storage:
-
-- Save as local encrypted image until sync.
-- Upload to restricted consent signatures storage path.
-- Do not include signature image in analysis export.
-
----
-
-## 18. Proxy Consent Handling
-
-Proxy consent should be available only when ethically required and approved in field protocol.
-
-Fields:
+Actions:
 
 ```text
-Proxy consent required: Yes / No
-Proxy name
-Proxy relation
-Reason proxy consent is required
-Participant verbal assent present: Yes / No
-Field investigator note
-```
-
-Rule:
-
-```text
-Proxy consent cannot replace the participant’s own assent where the participant can clearly assent or refuse.
+Approve
+Return for clarification
+Escalate to PI
+Exclude from analysis
+Mark withdrawal processed
 ```
 
 ---
 
-## 19. Offline Mode
-
-Offline banner copy:
-
-```text
-You are offline. Records are saved securely on this device and will sync when internet is available.
-```
-
-Offline capabilities:
-
-- Start and complete consent.
-- Start and complete questionnaires.
-- Record notes.
-- Save audio locally if consent exists.
-- Save observation logs.
-- Queue sync.
-
-Online-only capabilities:
-
-- Cloud transcription.
-- Admin export.
-- Final dashboard refresh.
-- Cloud QA assignment.
-
----
-
-## 20. Frontend Acceptance Checklist
+## 16. Frontend Acceptance Checklist
 
 - [ ] Consent cannot be bypassed.
 - [ ] Written, oral, institutional NOC, and expert consent workflows exist.
-- [ ] OOP questionnaire is read-aloud and large-font.
-- [ ] Section A-C modules are city-adapted.
-- [ ] Remaining Sections D-H are represented.
-- [ ] Mandatory 25-minute break alert appears.
-- [ ] Fatigue and distress can be flagged at any point.
+- [ ] OOP questionnaire uses large-font read-aloud design.
+- [ ] Sections A-C are fully city-adapted.
+- [ ] Sections D-H are supported.
+- [ ] Mandatory 25-minute break alert works.
+- [ ] Fatigue and distress can be flagged anytime.
 - [ ] Audio recording is optional and consent-linked.
-- [ ] SQ-OOP and SSI-OOP are not presented in the same session.
-- [ ] Caregiver tool is separate from OOP tool.
+- [ ] SQ-OOP and SSI-OOP cannot occur in the same session.
+- [ ] Caregiver workflow is separated from OOP workflow.
 - [ ] FGD supports individual consent tracking.
-- [ ] Observation protocol includes non-intervention warning.
+- [ ] Observation module shows non-intervention warning.
 - [ ] QA queue exists.
-- [ ] Six-city multilingual support is planned in resource files.
-- [ ] Signature, thumb impression, and proxy consent workflows are available.
+- [ ] Multilingual strings are separated by city language.
