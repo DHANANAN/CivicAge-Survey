@@ -45,7 +45,7 @@ private val DarkColorScheme = darkColorScheme(
 )
 
 @Composable
-fun MyApplicationTheme(
+fun DCATheme(
     appearanceMode: String = "Professional Light",
     fontSizeMode: String = "Standard",
     content: @Composable () -> Unit

@@ -12,7 +12,7 @@ import com.civilagesurvey.app.data.repository.SurveyRepository
 import com.civilagesurvey.app.data.repository.GoogleFormsRepository
 import com.civilagesurvey.app.data.api.GoogleFormsApiService
 import com.civilagesurvey.app.ui.screens.MainSurveyApp
-import com.civilagesurvey.app.ui.theme.MyApplicationTheme
+import com.civilagesurvey.app.ui.theme.DCATheme
 import com.civilagesurvey.app.ui.viewmodel.SurveyViewModel
 import com.civilagesurvey.app.ui.viewmodel.SurveyViewModelFactory
 
@@ -34,7 +34,7 @@ class MainActivity : ComponentActivity() {
             val appearanceMode by viewModel.appearanceMode.collectAsState()
             val fontSizeMode by viewModel.fontSizeMode.collectAsState()
 
-            MyApplicationTheme(
+            DCATheme(
                 appearanceMode = appearanceMode,
                 fontSizeMode = fontSizeMode
             ) {

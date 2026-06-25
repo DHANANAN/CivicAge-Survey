@@ -1,0 +1,1700 @@
+Final Combined Report
+CivicAge Survey App - ICSSR Data Collection Workflow Integration
+Project: Smart Cities, Silent Citizens
+Funding/Scheme: ICSSR Major Research Project 2025-26
+Domain: Legal Studies - Elder Abuse and Protection
+Field cities: New Delhi, Srinagar, Aizawl, Chennai, Gandhinagar, Indore
+Target demographic: Oldest Old Population aged 75+ years, with the current instrument kit operationalising several tools around 75-85 years
+App: CivicAge Survey (CAS)
+1. Core Idea of the App
+The CivicAge Survey app should be understood as a fieldwork operating system for ethical, accessible, and legally defensible research with the oldest old population. The study is not only collecting answers; it is documenting how digital-by-default smart city governance affects autonomy, dignity, well-being, service access, social participation, and dependence among older persons.
+The app therefore has to do five jobs at the same time:
+**Guide field investigators** through every consent, questionnaire, interview, FGD, observation, and QA step.
+**Protect vulnerable participants** by making participation voluntary, skippable, stoppable, low-risk, and fatigue-sensitive.
+**Convert the full instrument kit into a structured workflow**, including 17 primary instruments, 4 consent forms, 4 QA tools, and 2 annexures.
+**Secure the research data** through participant codes, locked linkage files, anonymisation, role-based access, audio deletion, and QA approval before export.
+**Produce reliable research evidence** that can support legal, policy, urban governance, and gerontological findings without exposing individual participants or institutions.
+In simple terms: CAS is not just a survey app. It is the digital field protocol for the entire ICSSR project.
+2. Why the App Is Needed
+The research concerns older persons who may face physical, cognitive, sensory, literacy, language, and confidence barriers in digital environments. Ordinary survey tools are not enough because they do not enforce consent, privacy, breaks, local language adaptation, caregiver separation, observation ethics, audio deletion, or anonymised reporting. CAS must therefore embed the research protocol directly into the software.
+The app should make it impossible or difficult to commit core protocol errors such as:
+starting a tool without consent;
+recording audio without audio consent;
+administering SQ-OOP and SSI-OOP in the same session;
+forgetting the 25-minute break;
+storing names inside research answers;
+exporting a record before QA;
+retaining audio after transcription;
+publishing institution names without permission;
+treating skipped items as missing data.
+3. Overall App Workflow
+Login
+  -> Select City and Role
+  -> Select Stakeholder
+  -> Complete / Verify Consent
+  -> Generate Participant or Institution Code
+  -> Select Instrument
+  -> Conduct Session
+  -> Capture Breaks, Skips, Fatigue, and Notes
+  -> Save Draft / Submit
+  -> Sync Securely
+  -> QA Review
+  -> Audio Transcription and Deletion, where applicable
+  -> Anonymised Export
+  -> Aggregated Reporting
+
+
+4. Backend Summary
+The backend should be built on Firebase Authentication, Cloud Firestore, Cloud Storage, Cloud Functions, and local encrypted storage for offline fieldwork. Every person and instrument must be identified through a code rather than a name.
+Participant code format:
+CAS-{CITY}-{STAKEHOLDER}-{YYYY}-{SEQUENCE}
+
+
+Example:
+CAS-ND-OOP-2026-0001
+
+
+Core backend collections:
+/users
+/participants
+/institutions
+/linkageFiles
+/consents
+/instruments
+/sessions
+/audioJobs
+/transcripts
+/qaReviews
+/exports
+/auditLogs
+/withdrawalRequests
+
+
+The backend must separate the research record from the identifier record. Direct identifiers such as name, phone, address, proxy details, and institutional names are stored in a locked linkage file. Research records use participant code only.
+5. Frontend Summary
+The frontend must be native Android, offline-first, large-font, high-contrast, and designed for field investigator administration. The OOP questionnaire should be read aloud and should not be treated as a self-administered form.
+Core frontend modules:
+Module
+Purpose
+Consent module
+Written, oral, institutional NOC, and expert consent.
+OOP questionnaire
+Sections A-H with break and fatigue safeguards.
+OOP interview
+Five-theme semi-structured interview with 2-day gap rule.
+Caregiver module
+Separate caregiver questionnaire and interview.
+Expert modules
+MoHUA/SPV, planners, ICCC, municipal, OAH, DLT, NGO, geriatric, legal.
+FGD module
+Group discussion with individual consent tracking.
+Observation module
+Real-world shadowing with non-intervention warning.
+Doctrinal module
+Legal/policy document analysis.
+QA module
+Review, escalation, exclusion, and export readiness.
+
+
+6. Consent as the First Layer
+The consent system is the moral and legal gate of the app. Four consent categories are required:
+Consent
+Use
+Written OOP consent
+For participants able to sign or thumb-print.
+Oral OOP consent
+For low literacy or cognitive impairment situations; verbal assent recorded.
+Institutional NOC
+For old age homes and community organisations; individual consent still required.
+Expert/key informant consent
+For officials, professionals, experts, and institutional stakeholders.
+
+
+Consent must record audio choice, geotagging choice, withdrawal explanation, skip-right explanation, language, timestamp, and field investigator code.
+7. Instrument Integration
+The app must support the following instrument universe:
+Tool code
+Instrument group
+App treatment
+SQ-OOP-v1.0
+Structured questionnaire for OOP
+Read-aloud, large-font, sections A-H.
+SSI-OOP-v1.0
+Semi-structured OOP interview
+2-day gap, optional audio, thematic guide.
+SSI-MoHUA/SPV-v1.0
+MoHUA/SPV expert interview
+Expert module.
+SSI-UP-v1.0
+Urban planner/interface designer interview
+Expert module.
+SSI-ICCC-v1.0
+ICCC/technology service provider interview
+Technical systems module.
+FI-MCO-v1.0
+Municipal ward official interview
+Municipal frontline module.
+SSI-OAH-Admin-v1.0
+Old age home administrator interview
+Institutional module.
+SSI-DLT-v1.0
+Digital literacy trainer interview
+Training/programme module.
+SSI-NGO-v1.0
+NGO/civil society interview
+Civil society module.
+SEI-Geri-v1.0
+Geriatrician/mental health expert interview
+Clinical expert module.
+EI-Legal-Ac-v1.0
+Legal scholar interview
+Legal expert module.
+SQ-CG + SSI-CG-v1.0
+Caregiver questionnaire and interview
+Separate caregiver module.
+FO-OOP-v1.0
+Field observation and shadowing
+Observation module.
+FGD-OOP/CG-v1.0
+Focus group discussion
+FGD module.
+DOCTRINAL-v1.0
+Legal/policy document analysis
+Research associate/PI module.
+QA-v1.0
+QA tools
+Supervisor/admin queue.
+Annexures
+Crosswalk and city deployment matrix
+Admin dashboard and planning module.
+
+
+8. Session Logic
+The app logic must enforce:
+SQ-OOP and SSI-OOP separation.
+Minimum 2-day gap between OOP questionnaire and OOP interview.
+Mandatory break alert at 25 minutes for SQ-OOP.
+Time stamping of start, break, pause, resume, end, sync, QA, export.
+Skip marking as `S` with reason.
+Fatigue and distress flags.
+Optional audio recording only when consent exists.
+Audio upload, transcription, transcript review, and deletion.
+Export block until QA approval and audio deletion.
+9. Data Usage and Anonymisation
+The data model must protect participants by default. Direct identifiers are stored separately from the research answers. Research outputs should be based on group findings, city-level patterns, stakeholder categories, age bands, and anonymised quotations.
+Anonymisation pipeline:
+Raw data -> Participant code -> Locked linkage file -> Cleaned instrument data -> De-identified transcript -> QA -> Anonymised export -> Group-level report
+
+
+Excluded from analysis exports:
+Name
+Phone
+Full address
+Signature/thumb impression
+Proxy name
+Emergency contact
+Raw audio
+Exact GPS coordinates
+Institution actual name without permission
+Named official/expert without permission
+
+
+10. City-wise Deployment Logic
+City
+Language adaptation
+Service configuration
+New Delhi
+Hindi, English, Urdu optional
+Delhi Metro app, Delhi One app, EDMC e-services, Mohalla Clinic app, smart parking.
+Srinagar
+Kashmiri, Urdu, Hindi, English
+Smart bus shelters, Wi-Fi hotspots, ICCC grievance portal, smart waste management.
+Aizawl
+Mizo, English, Hindi optional
+Solid waste tracking, sewerage monitoring, ICCC civic services.
+Chennai
+Tamil, English
+Smart roads, e-bus tracking, digital health centres, smart parks.
+Gandhinagar
+Gujarati, Hindi, English
+iNagar app, GIFT City infrastructure services, smart health kiosks.
+Indore
+Hindi, English
+311 Smart City app, BRTS digital booking, ICCC grievance system, digital waste compliance.
+
+
+11. Stakeholder Matrix
+Stakeholder
+Reason for inclusion
+Oldest Old Persons
+Primary affected group and direct source of lived experience.
+Caregivers
+Capture dependency, support burden, and family dynamics.
+Old age home administrators
+Capture institutional constraints and care setting issues.
+NGOs
+Capture ground-level exclusion patterns and advocacy evidence.
+MoHUA/SPV officials
+Capture governance and Smart City Mission planning.
+Urban planners/designers
+Capture age-inclusive design assumptions.
+ICCC operators/vendors
+Capture digital service backend and failure data.
+Municipal officials
+Capture last-mile service delivery and offline alternatives.
+Digital literacy trainers
+Capture training design and post-training gaps.
+Geriatricians
+Capture cognitive, emotional, and health impact.
+Legal scholars
+Capture constitutional, statutory, and elder-rights analysis.
+
+
+12. QA and Export Readiness
+A record is export-ready only when:
+Consent is locked
+Instrument is completed
+Required FI logs are completed
+Audio is deleted, if audio was used
+Transcript is reviewed, if interview was recorded
+QA is approved
+Participant has not withdrawn
+Anonymisation is complete
+
+
+QA should identify:
+missing consent
+same-day SQ/SSI violation
+missing break
+high skip count
+distress flag
+audio without consent
+audio pending deletion
+missing transcript review
+institution named without permission
+
+
+13. Implementation Roadmap
+Phase 1: Documentation and Schema Finalisation
+Approve UID schema, participant code, instrument codes, consent objects, and storage paths.
+Freeze role-based access model.
+Add the five documentation files to the repository.
+Phase 2: Consent and Participant Core
+Build written, oral, institutional NOC, and expert consent screens.
+Add signature/thumb impression capture.
+Add participant code generation and linkage file separation.
+Phase 3: OOP Questionnaire and Interview
+Build SQ-OOP Sections A-H.
+Add 25-minute break alert, fatigue flag, and `S` skip logic.
+Build SSI-OOP with 2-day gap rule and optional audio.
+Phase 4: Stakeholder Modules
+Build caregiver, expert, OAH, DLT, NGO, geriatric, legal, ICCC, municipal, FGD, observation, and doctrinal modules.
+Phase 5: Data Security, QA, and Export
+Build audio transcription pipeline.
+Add audio deletion proof.
+Add QA queue and export-blocking rules.
+Generate anonymised export datasets.
+Phase 6: Multilingual Pilot and Field Testing
+Add six-city language support.
+Pilot in each city.
+Revise based on field investigator feedback and participant welfare observations.
+14. Final Design Statement
+The final CAS app should be a consent-led, offline-capable, multilingual Android fieldwork system that translates the full ICSSR instrument kit into a safe and auditable workflow. Its success will not be measured only by whether it collects data, but by whether it collects data ethically, protects the oldest old participants, preserves methodological quality, and produces anonymised evidence that can support legal and policy reform on age-inclusive smart city governance.
+
+Appendix: Five Technical Markdown Documents
+
+Backend.md
+CivicAge Survey (CAS) Backend Architecture
+Project: Smart Cities, Silent Citizens - ICSSR Major Research Project 2025-26
+App: CivicAge Survey (CAS)
+Target group: Oldest Old Population (75+ years; tool-set operationally captures 75-85 years where specified)
+Cities: New Delhi, Srinagar, Aizawl, Chennai, Gandhinagar, Indore
+Backend stack: Firebase Authentication, Cloud Firestore, Cloud Storage, Cloud Functions, and local encrypted Room cache.
+1. Backend Design Idea
+The backend must work as a secure research-data spine. It should not behave like a simple survey form collector. It must preserve the integrity of consent, separate identifiers from research data, store each instrument as a separate record, track fieldwork protocol compliance, and support anonymised analysis. The app should therefore be built around participant codes, instrument UIDs, locked consent records, role-based access, audit logs, QA decisions, and automatic privacy controls.
+2. Firebase UID Schema
+2.1 City Codes
+NEW_DELHI = ND
+SRINAGAR = SG
+AIZAWL = AZ
+CHENNAI = CH
+GANDHINAGAR = GN
+INDORE = IN
+
+
+2.2 Stakeholder Codes
+OOP = Oldest Old Person
+CG = Caregiver / family member
+OAH = Old age home / care institution
+MOHUA = MoHUA / Smart City SPV official
+UP = Urban planner / interface designer
+ICCC = Integrated Command and Control Centre operator / tech vendor
+MCO = Municipal ward-level official
+DLT = Digital literacy trainer / coordinator
+NGO = NGO or civil society organisation
+GERI = Geriatrician / mental-health professional
+LEGAL = Constitutional law / elder-rights scholar
+FGD = Focus group discussion
+FO = Field observation / shadowing
+DOC = Doctrinal legal-policy document review
+QA = Quality assurance tool
+
+
+2.3 Participant Code Format
+CAS-{CITY}-{STAKEHOLDER}-{YYYY}-{SEQUENCE}
+
+
+Examples:
+CAS-ND-OOP-2026-0001
+CAS-SG-CG-2026-0012
+CAS-CH-GERI-2026-0003
+
+
+2.4 Instrument Instance UID
+{participantOrInstitutionCode}-{TOOL_CODE}-S{SESSION_SEQUENCE}
+
+
+Examples:
+CAS-ND-OOP-2026-0001-SQ-OOP-v1.0-S01
+CAS-ND-OOP-2026-0001-SSI-OOP-v1.0-S02
+CAS-IN-OAH-2026-0004-SSI-OAH-Admin-v1.0-S01
+
+
+3. Firestore Structure
+/projects/{projectId}
+  /users/{firebaseUid}
+  /participants/{participantCode}
+  /institutions/{institutionCode}
+  /linkageFiles/{participantCode}
+  /consents/{consentUid}
+  /instruments/{instrumentUid}
+  /sessions/{sessionUid}
+  /audioJobs/{audioJobUid}
+  /transcripts/{transcriptUid}
+  /qaReviews/{qaReviewUid}
+  /exports/{exportUid}
+  /auditLogs/{auditLogUid}
+  /withdrawalRequests/{requestUid}
+
+
+Recommended project ID:
+SC-SC-ICSSR-2025-26
+
+
+4. User and Role Schema
+{
+  "firebaseUid": "auth uid",
+  "surveyorCode": "FI-ND-001",
+  "fullName": "Field Investigator Name",
+  "email": "user@example.org",
+  "role": "field_investigator",
+  "cityAssigned": "ND",
+  "active": true,
+  "trainingCompleted": true,
+  "ethicsPledgeSigned": true,
+  "permissions": {
+    "canCollectOOP": true,
+    "canCollectCaregiver": true,
+    "canConductFGD": false,
+    "canExport": false,
+    "canViewIdentifiers": false
+  }
+}
+
+
+Role
+Access
+Admin / PI
+Full access including linkage files, exports, withdrawals, audit logs.
+Field supervisor
+City-level records and QA review, without direct identifiers unless authorised.
+Field investigator
+Own assigned drafts and submissions.
+Transcriber
+Assigned transcript only, no participant identifiers.
+Analyst
+Anonymised data only.
+Viewer
+Aggregated dashboard only.
+
+
+5. Consent Storage Paths
+Firestore:
+/projects/{projectId}/consents/{consentUid}
+
+Storage:
+/projects/{projectId}/consentSignatures/{cityCode}/{participantCode}.png
+/projects/{projectId}/oralAssent/{cityCode}/{participantCode}.m4a
+
+
+Consent schema:
+{
+  "consentUid": "CAS-ND-OOP-2026-0001-CONSENT-OOP-W",
+  "participantCode": "CAS-ND-OOP-2026-0001",
+  "consentType": "CONSENT-OOP-W",
+  "consentMode": "written_thumbprint",
+  "language": "Hindi",
+  "consentGiven": true,
+  "audioRecordingConsent": false,
+  "geoTagConsent": true,
+  "withdrawalExplained": true,
+  "skipRightExplained": true,
+  "signedAt": 1730000000000,
+  "locked": true,
+  "qaStatus": "pending_review"
+}
+
+
+Consent forms to support:
+Code
+Consent form
+Rule
+CONSENT-OOP-W
+Written consent for OOP
+Signature or left thumb impression.
+CONSENT-OOP-O
+Oral consent for low literacy/cognitive impairment
+Read-aloud script and verbal assent recording.
+CONSENT-INST-NOC
+Institutional NOC
+Required for institutional access but does not replace individual consent.
+CONSENT-KI
+Expert/key informant consent
+Includes audio and naming-permission choices.
+
+
+6. JSON Paths by Instrument Type
+Questionnaires:
+/projects/{projectId}/json/questionnaires/{cityCode}/{toolCode}/{instrumentUid}.json
+
+Interviews:
+/projects/{projectId}/json/interviews/{cityCode}/{toolCode}/{instrumentUid}.json
+/projects/{projectId}/transcripts/{cityCode}/{toolCode}/{instrumentUid}.txt
+
+FGDs:
+/projects/{projectId}/json/fgds/{cityCode}/{fgdUid}.json
+/projects/{projectId}/transcripts/fgds/{cityCode}/{fgdUid}.txt
+
+Field observations:
+/projects/{projectId}/json/observations/{cityCode}/{instrumentUid}.json
+
+Doctrinal review:
+/projects/{projectId}/json/doctrinal/{docReviewUid}.json
+
+QA:
+/projects/{projectId}/json/qa/{cityCode}/{qaReviewUid}.json
+
+
+7. Instrument Base Schema
+{
+  "instrumentUid": "CAS-ND-OOP-2026-0001-SQ-OOP-v1.0-S01",
+  "toolCode": "SQ-OOP-v1.0",
+  "toolType": "structured_questionnaire",
+  "participantCode": "CAS-ND-OOP-2026-0001",
+  "cityCode": "ND",
+  "language": "Hindi",
+  "sessionUid": "CAS-ND-OOP-2026-0001-S01",
+  "createdBy": "FI-ND-001",
+  "startedAt": 1730000000000,
+  "endedAt": 1730003600000,
+  "status": "completed",
+  "consentUid": "CAS-ND-OOP-2026-0001-CONSENT-OOP-W",
+  "audioConsent": false,
+  "geoTagConsent": true,
+  "answers": {},
+  "skipLog": [],
+  "fatigue": {
+    "breakAlertShownAtMinute": 25,
+    "breakAccepted": true,
+    "fatigueObserved": false,
+    "distressObserved": false,
+    "terminatedEarly": false
+  },
+  "qa": {
+    "requiresReview": true,
+    "reviewStatus": "pending"
+  }
+}
+
+
+8. Audio Transcription Pipeline
+Record locally -> Encrypt locally -> Upload temporary audio -> Create audio job -> Transcribe -> Save transcript -> QA review -> Delete audio -> Store deletion proof
+
+
+Temporary audio path:
+/projects/{projectId}/audio-temp/{cityCode}/{toolCode}/{instrumentUid}/{audioFileName}.m4a
+
+
+Audio job schema:
+{
+  "audioJobUid": "AUDIO-CAS-ND-OOP-2026-0001-SSI-OOP-v1.0-S02",
+  "instrumentUid": "CAS-ND-OOP-2026-0001-SSI-OOP-v1.0-S02",
+  "audioConsent": true,
+  "status": "uploaded / transcribing / transcribed / reviewed / audio_deleted / failed",
+  "transcriptPath": "projects/.../transcripts/...txt",
+  "audioDeletedAt": null,
+  "deleteProof": {
+    "deletedByFunction": true,
+    "deletionLogUid": "AUDIT-..."
+  }
+}
+
+
+Deletion rule: audio is uploaded only for transcription and must be deleted after transcript verification.
+9. Geo-tagging Rules
+Use geotagging only when explicit consent exists.
+Exact home addresses must not be stored in instrument data.
+Analysis exports should use city/ward/locality categories, not raw coordinates.
+Admin and supervisor can view operational geodata; analysts should receive aggregated or masked fields only.
+10. Admin Dashboard Indicators
+{
+  "totalParticipants": 0,
+  "oopParticipants": 0,
+  "caregiverParticipants": 0,
+  "completedSQ": 0,
+  "completedSSI": 0,
+  "completedFGD": 0,
+  "completedObservation": 0,
+  "pendingSync": 0,
+  "pendingQA": 0,
+  "withdrawnParticipants": 0,
+  "audioPendingDeletion": 0,
+  "breakComplianceRate": 0,
+  "consentCompletenessRate": 0
+}
+
+
+11. ICSSR Ethical Compliance Controls
+Requirement
+Backend control
+Voluntary participation
+Locked consent record with withdrawal explanation.
+Right to skip
+Skip log with value `S` and reason.
+Right to withdraw
+Withdrawal request collection and export block.
+Minimal risk
+Fatigue/distress flags and termination option.
+Privacy
+Participant code first, linkage file locked separately.
+Audio optional
+Audio disabled unless audio consent is true.
+Audio deletion
+Export blocked until deletion proof exists.
+Group reporting
+Anonymised export function and minimum cell-size rule.
+QA
+QA review required before final analysis export.
+
+
+12. Backend Acceptance Checklist
+☐ All 17 primary instruments can be stored as separate tool records.
+☐ All 4 consent forms are implemented.
+☐ QA records can block export.
+☐ Audio upload-transcribe-delete pipeline exists.
+☐ SQ and SSI separation can be validated through timestamps.
+☐ Participant code is used instead of name in research data.
+☐ Institutional names are anonymised unless permission exists.
+☐ Admin dashboard tracks progress, protocol violations, QA, and deletion status.
+
+Frontend.md
+CivicAge Survey (CAS) Frontend Specification
+Project: Smart Cities, Silent Citizens - ICSSR Major Research Project 2025-26
+Platform: Native Android
+Primary users: Field investigators, supervisors, administrators, transcribers, and analysts.
+Primary participants: Oldest old persons aged 75+, plus caregivers and stakeholder experts.
+1. Frontend Idea
+The CAS frontend must feel like an ethical fieldwork assistant, not merely a form. It must guide the field investigator through consent, participant welfare, questionnaire administration, interviews, observation, FGDs, and QA. Since the primary participants are oldest old persons, the interface must be large-font, slow-paced, read-aloud, local-language friendly, fatigue-sensitive, and capable of pausing or stopping without treating the session as failed.
+2. Main Navigation
+Login
+  -> Home Dashboard
+     -> Instruments
+     -> Records
+     -> Sync / Export
+     -> QA Queue
+     -> Settings
+     -> Profile
+
+
+Bottom tabs:
+Home | Instruments | Records | Sync | QA | Settings | Profile
+
+
+Home cards:
+Completed Sessions | Drafts | Pending Sync | Pending QA | Audio Pending Deletion | City Assignment
+
+
+3. Native Android UI Standards
+Element
+Standard
+OOP question text
+20-22sp recommended; minimum 18sp.
+Body text
+Minimum 16sp.
+Response options
+Large cards, minimum 48dp/56dp height.
+Screen density
+One major question or one thematic cluster per screen.
+Navigation
+Next, Back, Pause, Save Draft, End Session.
+Error messages
+Plain language; no technical jargon.
+Colour
+High contrast; avoid low-contrast grey text.
+
+
+4. Consent Workflows
+4.1 Consent selector
+[ ] Written Consent - Oldest Old Participant
+[ ] Oral Consent - Low Literacy / Cognitive Impairment
+[ ] Institutional NOC - Old Age Home / Community Organisation
+[ ] Expert / Key Informant Consent
+
+
+4.2 Written consent workflow
+Screens:
+Study title and field investigator introduction.
+What the study is about.
+What the participant will be asked to do.
+Privacy and participant code explanation.
+Audio recording choice.
+Minimal risk, right to skip, and right to stop.
+Voluntary participation and withdrawal rights.
+Signature or left thumb impression.
+Consent summary and lock.
+Required controls:
+Signature / Thumb Impression Canvas
+Consent to Audio Recording: Yes / No
+Consent to Geo-tagging: Yes / No
+Participant understands withdrawal: Yes / No
+Lock Consent
+
+
+4.3 Oral consent workflow
+Controls:
+Play / read oral consent script
+Start Assent Recording
+Stop Assent Recording
+Participant says YES
+Participant says NO / unclear / reluctant
+Proxy Consent Required: Yes / No
+Do Not Proceed
+
+
+Rule: If the participant refuses, appears confused, or remains unclear after one repeat, the app must block data collection.
+4.4 Institutional NOC workflow
+Fields:
+Institution name / code
+Institution type
+Authorised signatory
+Permission scope
+Individual consent reminder
+Anonymisation permission
+NOC file/photo attachment if allowed
+
+
+Institutional NOC never replaces individual consent.
+4.5 Expert consent workflow
+For MoHUA/SPV, planners, ICCC operators, municipal officials, old age home administrators, digital literacy trainers, NGOs, geriatricians, and legal scholars.
+Default: anonymise identity and institutional affiliation unless explicit naming permission is recorded.
+5. Instrument Launcher
+Start New Session
+  -> Select City
+  -> Select Stakeholder
+  -> Select Participant / Institution Code
+  -> Verify or complete consent
+  -> Select Instrument
+  -> Run Instrument
+  -> Complete FI log
+  -> Submit for QA or Save Draft
+
+
+Instrument categories:
+Consent Forms
+OOP Structured Questionnaire
+OOP Semi-Structured Interview
+Expert / Key Informant Interviews
+Caregiver Questionnaire + Interview
+Field Observation / Shadowing
+Focus Group Discussion
+Doctrinal Template
+QA Checklists
+Annexures
+
+
+6. SQ-OOP Questionnaire UI
+Administration mode:
+Read aloud by Field Investigator. Self-administration is not appropriate for OOP participants.
+
+
+Session metadata:
+Participant ID
+Date
+City
+Start Time
+End Time
+Field Investigator Code
+Location Type
+Neighbourhood / Ward
+Break Given at 25 Minutes: Yes / No
+
+
+Sections:
+Section
+Content
+UI treatment
+A
+Socio-demographics
+Single choice and short text. Sensitive fields skippable.
+B
+Device ownership and digital exposure
+Device reference cards.
+C
+Smart city service awareness and usage
+City-specific service cards.
+D
+Digital Anxiety Scale
+5-point Likert with read-aloud response card.
+E1
+Digital Dependency Index
+Frequency and help-dependence items.
+E2
+Dignity Perception Scale
+5-point Likert; scoring later.
+F
+Social isolation and intergenerational impact
+Frequency/perception items.
+G
+Digital literacy programme and welfare awareness
+Programme exposure and scheme access.
+H
+FI observation log
+Completed privately after session.
+
+
+7. City-specific Section C Cards
+City
+Service cards
+New Delhi
+Delhi Metro app, Delhi One app, EDMC e-services, Mohalla Clinic app, smart parking.
+Srinagar
+Smart bus shelters, Wi-Fi hotspots, ICCC grievance portal, smart waste management.
+Aizawl
+Smart solid waste tracking, sewerage monitoring, ICCC civic services.
+Chennai
+Smart road services, e-bus tracking, digital health centres, smart parks.
+Gandhinagar
+iNagar app, GIFT City infrastructure services, smart health kiosks.
+Indore
+311 Smart City app, BRTS digital booking, ICCC grievance system, digital waste compliance.
+
+
+Grid columns:
+Heard of it? | Tried to use it? | Used successfully alone? | Used with help? | Never used / gave up?
+
+
+8. Break Alerts and Fatigue Detection
+At 25 minutes in SQ-OOP:
+It has been 25 minutes. Please pause and offer the participant a break.
+
+[Break Accepted]
+[Participant Wants to Continue]
+[Pause Session]
+[End Session]
+
+
+Fatigue button visible on OOP tools:
+Participant looks tired / distressed
+
+
+Checklist:
+Confusion | Long silence | Repeated re-explanation | Physical discomfort | Emotional distress | Hearing/visual strain | Asked to pause | Asked to stop
+
+
+Actions:
+Offer Break | Skip Question | End Session | Escalate to Supervisor/PI
+
+
+9. SSI-OOP Interview UI
+Rules:
+Minimum 2-day gap from SQ-OOP.
+Audio only with consent.
+60-minute alert.
+Post-interview reflexivity note within 30 minutes.
+Theme screens:
+T1 Life before and after digital transformation
+T2 Smart city service experiences
+T3 Digital anxiety, emotion, and mental well-being
+T4 Social connections and family dynamics
+T5 Rights, dignity, and policy
+
+
+Controls:
+Mark Asked | Mark Skipped | Add Note | Add Quote | Flag Distress | Pause Recording | End Interview
+
+
+10. Caregiver, FGD, Observation, and Expert UI
+Caregiver
+Administer separately from OOP.
+Capture digital help burden, task types, missed services, and relationship effects.
+FGD
+Verify consent for every participant.
+Use participant codes only.
+Audio only if every participant consents.
+Record group-level findings, not individual attributions.
+Observation / Shadowing
+Separate shadowing consent.
+Real destination and real purpose only.
+FI does not intervene unless participant asks to stop or faces physical danger.
+Expert Tools
+Expert profile page.
+Consent with audio and naming permission toggles.
+Theme-based guide.
+Document request checklist.
+11. Multilingual Adaptation
+City
+Required language support
+New Delhi
+Hindi, English, Urdu optional.
+Srinagar
+Kashmiri, Urdu, Hindi, English.
+Aizawl
+Mizo, English, Hindi optional.
+Chennai
+Tamil, English.
+Gandhinagar
+Gujarati, Hindi, English.
+Indore
+Hindi, English.
+
+
+Android resource folders:
+res/values/strings.xml
+res/values-hi/strings.xml
+res/values-ur/strings.xml
+res/values-ta/strings.xml
+res/values-gu/strings.xml
+res/values-miz/strings.xml
+res/values-ks/strings.xml
+
+
+12. Accessibility Features
+Large print mode.
+Read-aloud mode.
+Audio playback of consent script.
+Visual response cards.
+High contrast mode.
+Thumb impression signing.
+Proxy consent flag.
+Pause, skip, and withdraw buttons.
+No small checkboxes on OOP screens.
+13. Frontend Acceptance Checklist
+☐ Consent cannot be bypassed.
+☐ Written, oral, institutional NOC, and expert consent workflows exist.
+☐ OOP questionnaire uses read-aloud, large-font design.
+☐ City-specific service cards are configured.
+☐ 25-minute break alert works.
+☐ Fatigue/distress can be flagged anytime.
+☐ Audio recording is consent-linked.
+☐ SQ-OOP and SSI-OOP cannot be run on same day.
+☐ FGD tracks individual consent.
+☐ Observation shows non-intervention warning.
+☐ QA queue is available.
+
+Logic.md
+CivicAge Survey (CAS) Logic Rules
+Project: Smart Cities, Silent Citizens - ICSSR Major Research Project 2025-26
+Purpose: Define the rules that control consent, session sequencing, skip logic, timestamping, fatigue safeguards, interviews, FGDs, observations, audio, and QA.
+1. Core Logic Idea
+The CAS logic layer acts as the ethical and methodological guardrail of the app. It ensures that field investigators cannot accidentally breach protocol by skipping consent, administering the structured questionnaire and interview in one sitting, forgetting the mandatory break, recording audio without consent, retaining audio after transcription, or exporting records before QA approval.
+2. Global Session State Machine
+NOT_STARTED
+  -> CONSENT_REQUIRED
+  -> CONSENT_IN_PROGRESS
+  -> CONSENT_LOCKED
+  -> SESSION_READY
+  -> SESSION_IN_PROGRESS
+  -> PAUSED
+  -> COMPLETED_PENDING_FI_LOG
+  -> SUBMITTED_PENDING_SYNC
+  -> SYNCED_PENDING_QA
+  -> QA_APPROVED
+  -> EXPORT_READY
+
+
+Exception states:
+DO_NOT_PROCEED
+TERMINATED_EARLY
+WITHDRAWN
+AUDIO_PENDING_DELETION
+QA_EXCLUDED
+
+
+3. Consent Gate Logic
+if (!consent.exists || !consent.locked || consent.consentGiven != true) {
+    blockInstrumentStart("Consent is incomplete or not locked.")
+}
+
+
+Consent-to-tool mapping:
+Tool group
+Required consent
+SQ-OOP
+OOP written or oral consent.
+SSI-OOP
+OOP consent plus audio consent if recording.
+FO-OOP
+Separate shadowing consent.
+FGD
+Individual consent for every participant.
+Expert interviews
+Expert/key informant consent.
+Institutional tools
+Institutional NOC plus individual consent for residents.
+Doctrinal template
+No human-subject consent; source citation required.
+
+
+Oral consent rule:
+If verbal assent is NO, unclear, confused, or reluctant, set session state to DO_NOT_PROCEED.
+
+
+Proxy consent rule:
+Proxy consent may be recorded only where required by protocol and must not override the participant's clear refusal.
+
+
+4. SQ vs SSI Separation
+val sqDate = getCompletedInstrumentDate(participantCode, "SQ-OOP-v1.0")
+val today = currentDate()
+
+if (toolCode == "SSI-OOP-v1.0") {
+    require(sqDate != null) { "SQ-OOP must be completed before SSI-OOP." }
+    require(daysBetween(sqDate, today) >= 2) { "Minimum 2-day gap from SQ-OOP is required." }
+}
+
+
+Same-day block:
+If SQ-OOP is completed today, SSI-OOP button displays: Available after two days.
+
+
+5. Duration and Break Logic
+Tool
+Preferred duration
+Alert
+SQ-OOP
+45-55 minutes
+Mandatory break at 25 minutes; hard warning near 60 minutes.
+SSI-OOP
+60-75 minutes
+Alert at 60 minutes.
+Expert interviews
+45-90 minutes
+Configurable alert.
+Caregiver structured part
+15-20 minutes
+Alert at 20 minutes.
+Caregiver interview
+30-40 minutes
+Alert at 40 minutes.
+Observation
+60-120 minutes
+Safety check every 30 minutes.
+FGD
+Protocol based
+Moderator-controlled break.
+
+
+Break trigger:
+if (toolCode == "SQ-OOP-v1.0" && elapsedMinutes >= 25 && !breakPromptShown) {
+    showBreakPrompt()
+    logEvent("break_prompt_shown")
+}
+
+
+6. Skip Logic
+Skipped item format:
+{
+  "questionId": "A7",
+  "value": "S",
+  "skipReason": "participant_fatigued",
+  "skippedAt": 1730000000000,
+  "skippedBy": "FI-ND-001"
+}
+
+
+Standard reasons:
+participant_refused
+participant_fatigued
+question_not_applicable
+participant_did_not_know
+participant_preferred_not_to_say
+sensitive_question
+language_comprehension_issue
+hearing_or_visual_difficulty
+time_constraint
+fi_protocol_decision
+
+
+`S - Skipped`, `N/A - Not Applicable`, and `DK - Do Not Know` must be treated as different values.
+7. Timestamping Rules
+Each session stores:
+{
+  "createdAt": 1730000000000,
+  "startedAt": 1730000000000,
+  "breakPromptedAt": 1730001500000,
+  "breakStartedAt": 1730001520000,
+  "breakEndedAt": 1730001820000,
+  "endedAt": 1730003600000,
+  "submittedAt": 1730003700000,
+  "syncedAt": null,
+  "qaReviewedAt": null
+}
+
+
+Offline device timestamps must be reconciled with server timestamps at sync. Large mismatches should be flagged for QA.
+8. Fatigue and Distress Logic
+Indicators:
+confusion
+visible tiredness
+repeated re-explanation
+long silence
+emotional distress
+hearing difficulty
+visual strain
+participant asks to pause
+participant asks to stop
+
+
+Rules:
+Mild fatigue -> offer break.
+Moderate fatigue -> pause or skip non-essential items.
+Significant distress -> end sensitive section or terminate session.
+Continued distress -> stop session and inform supervisor/PI.
+
+
+9. Audio Logic
+if (audioToggle == true && consent.audioRecordingConsent != true) {
+    blockAudioRecording("Audio recording consent has not been given.")
+}
+
+
+Allowed audio rules:
+Tool
+Audio rule
+SQ-OOP
+No interview audio; oral assent audio only if required.
+SSI-OOP
+Optional with consent.
+Expert interviews
+Optional with consent.
+Caregiver interview
+Optional with consent.
+FGD
+Only if all participants consent.
+Observation
+Ambient only if separately consented; no photography without specific consent.
+
+
+Audio states:
+not_started -> recording_local -> uploaded_temp -> transcribing -> transcribed -> transcript_reviewed -> audio_deleted
+
+
+10. Flow by Instrument
+SQ-OOP
+Consent locked -> metadata -> Sections A to C -> 25-minute break -> Sections D to G -> FI Section H -> review skips -> submit
+
+
+SSI-OOP
+Verify 2-day gap -> confirm consent/audio -> pre-interview checklist -> themes T1-T5 -> 60-minute alert -> closing -> reflexivity log -> transcript if audio -> QA
+
+
+FGD
+Create FGD -> add participant codes -> verify individual consent -> run phase guide -> capture activities -> moderator log -> QA
+
+
+Observation
+Separate consent -> real destination confirmation -> start timer -> route/service/staff logs -> accessibility heuristic -> FI reflection
+
+
+Doctrinal review
+Create document review -> select source type -> add citation -> extract legal/policy content -> map to objective -> synthesis memo -> PI review
+
+
+11. QA Triggers
+missing consent
+same-day SQ and SSI attempt
+2-day gap violation
+break not recorded
+session duration too long
+high skipped-item count
+distress flag
+audio recorded without consent
+audio not deleted after transcription
+missing FI observation log
+missing reflexivity log
+institution named without permission
+
+
+QA decisions:
+approve
+return_for_clarification
+escalate_to_pi
+exclude_from_analysis
+withdrawal_processed
+
+
+12. Export Readiness
+A record is export-ready only when:
+Consent locked
+Instrument completed
+Required FI logs completed
+Audio deleted, if audio was used
+Transcript reviewed, if interview was recorded
+QA approved
+Participant not withdrawn
+Anonymisation complete
+
+
+
+DataUsage.md
+CivicAge Survey (CAS) Data Usage, Anonymisation, Storage, Sharing, and QA Policy
+Project: Smart Cities, Silent Citizens - ICSSR Major Research Project 2025-26
+Purpose: Define how CAS data is collected, anonymised, stored, checked, exported, and shared without exposing participants or institutions.
+1. Data Usage Idea
+The data policy must make sure that the app collects rich field evidence without turning vulnerable participants into identifiable data points. The app therefore separates names from answers, uses participant codes for all research records, stores direct identifiers in a locked linkage file, deletes audio after transcription, anonymises institutions by default, and exports only QA-approved, anonymised data.
+2. Data Categories
+Category
+Examples
+Default handling
+Consent data
+Signature, thumb impression, assent audio ID
+Restricted; not in analysis export.
+Linkage data
+Name, phone, address, proxy details
+Admin-only encrypted linkage file.
+Questionnaire data
+SQ-OOP and caregiver responses
+Participant code only.
+Interview data
+Transcripts, quotes, notes
+De-identify before analysis.
+FGD data
+Group notes, activity outputs
+Group-level only.
+Observation data
+Route/service/staff interaction
+Remove personal identifiers and exact address.
+Institutional data
+OAH profile, programme data, NOC
+Anonymise by default.
+Doctrinal data
+Legal/policy documents
+Cite source.
+QA data
+Review notes, protocol flags
+Internal use only.
+Audit logs
+User actions and timestamps
+Admin-only review.
+
+
+3. Anonymisation Pipeline
+Raw field data
+  -> Participant code assigned
+  -> Direct identifiers separated
+  -> Linkage file encrypted and locked
+  -> Instrument data cleaned
+  -> Transcript de-identified
+  -> Institution names masked
+  -> QA review
+  -> Anonymised dataset generated
+  -> Group-level analysis export
+
+
+Participant code format:
+CAS-{CITY}-{STAKEHOLDER}-{YYYY}-{SEQUENCE}
+
+
+4. Direct Identifiers Excluded from Analysis
+Participant name
+Phone number
+Full address
+Exact house location
+Signature / thumb impression
+Proxy name
+Emergency contact
+Aadhaar or other identity number
+Raw audio file
+Photo or video file
+Institution actual name without permission
+Named official/expert without permission
+
+
+5. Transcript De-identification
+Replace:
+Names -> [PERSON]
+Address -> [LOCALITY]
+Phone number -> [PHONE]
+Institution name -> [INSTITUTION]
+Official name -> [OFFICIAL]
+Staff name -> [STAFF]
+Family member names -> [FAMILY_MEMBER]
+
+
+Example:
+Raw: My son Rajesh took me to the Indore 311 office near X Colony.
+Clean: My [FAMILY_MEMBER] took me to the Indore 311 office near [LOCALITY].
+
+
+6. Aggregation Rules
+Final reports should normally present:
+All-city aggregate
+City-level aggregate
+Stakeholder-group aggregate
+Age-band aggregate
+Gender aggregate where non-identifying
+Location type: community-dwelling / old age home
+
+
+Minimum cell size:
+Do not publish a subgroup cell if n < 5. Merge categories or suppress the cell.
+
+
+Quote label format:
+OOP participant, New Delhi, community-dwelling, age band 75-79.
+
+
+Do not use names, exact age, ward, institution name, phone, address, or unique identifying events.
+7. Secure Storage
+Restricted linkage:
+/projects/{projectId}/linkageFiles/{participantCode}
+
+
+Research records:
+/projects/{projectId}/instruments/{instrumentUid}
+/projects/{projectId}/json/{instrumentType}/{cityCode}/{instrumentUid}.json
+
+
+Transcripts:
+/projects/{projectId}/transcripts/{cityCode}/{toolCode}/{instrumentUid}.txt
+
+
+Consent signatures and oral assent:
+/projects/{projectId}/consentSignatures/{participantCode}.png
+/projects/{projectId}/oralAssent/{participantCode}.m4a
+
+
+8. Audio Deletion Policy
+Audio lifecycle:
+Local encrypted audio -> Temporary upload -> Transcription -> Transcript review -> Audio deletion -> Deletion audit log
+
+
+Export rule:
+If audioDeleted != true, record cannot be exported.
+
+
+9. Auto-delete After Study
+Delete after study completion or required retention period:
+Linkage files
+Consent signature images where no longer required
+Oral assent audio
+Raw interview audio
+Temporary transcription audio
+Exact geolocation coordinates
+Device identifiers
+Accidental direct identifiers in notes
+
+
+Retain only if permitted:
+Anonymised questionnaire dataset
+Anonymised transcript excerpts
+Aggregated tables
+Doctrinal research notes
+QA summary without identifiers
+
+
+10. Institutional Anonymisation
+Default rule:
+Institution names are anonymised unless explicit written permission for naming is given.
+
+
+Labels:
+OAH-ND-01
+OAH-CH-02
+NGO-AZ-01
+DLT-IN-01
+
+
+Allowed reporting:
+A private old age home in Chennai...
+A city-level NGO in Aizawl...
+
+
+Not allowed without permission:
+Exact institution name or identifiable staff details.
+
+
+11. QA Checklist Integration
+Stage
+QA check
+Consent
+Consent type, language, signature/thumb/assent, audio choice, withdrawal explanation.
+Session
+Correct tool, timestamps, break rule, no same-day SQ+SSI.
+Data quality
+Missing fields, excessive skips, inconsistencies, FI log.
+Interview
+Audio consent, transcript review, reflexivity note, distress flag.
+Observation
+Separate consent, non-intervention log, real destination.
+FGD
+Individual consent, no names, group-level reporting.
+Export
+De-identification, audio deletion, withdrawal status, QA approval.
+
+
+12. Sharing Anonymised Summaries with Institutions
+Allowed:
+Aggregated themes
+Non-identifying barriers
+Accessibility suggestions
+Digital literacy needs
+Group-level policy recommendations
+
+
+Not allowed:
+Named resident responses
+Caregiver conflict details
+Individual distress notes
+Identifying quotes
+Comparative ranking of named institutions without permission
+
+
+13. Role-based Data Access
+Role
+Data access
+Field investigator
+Own assigned records only.
+Field supervisor
+City-level records and QA queue.
+Transcriber
+Assigned transcript/audio only; no linkage file.
+Analyst
+Anonymised data only.
+PI/Admin
+Full access including linkage, withdrawal, and audit logs.
+
+
+14. Data Usage Acceptance Checklist
+☐ Analysis data uses participant codes only.
+☐ Linkage file is separate and locked.
+☐ Audio is deleted before export.
+☐ Transcripts are de-identified.
+☐ Institutions are anonymised by default.
+☐ Withdrawal requests block export.
+☐ QA approval is mandatory.
+☐ Only anonymised summaries are shared externally.
+
+DataContainings.md
+CivicAge Survey (CAS) Data Containings, Crosswalks, Deployment Matrix, Pitfalls, and Safeguards
+Project: Smart Cities, Silent Citizens - ICSSR Major Research Project 2025-26
+Purpose: Provide the instrument crosswalk, stakeholder matrix, city deployment map, pitfall mitigation plan, and ethical safeguards for the CAS app.
+1. Instrument Universe
+The app must represent:
+17 primary instruments
+4 consent forms
+4 QA tools
+2 annexures
+
+
+Every instrument must store:
+Tool code
+Instrument title
+Stakeholder category
+Consent requirement
+City applicability
+Session duration
+Administration mode
+Storage path
+QA requirement
+
+
+2. Consent Forms Crosswalk
+Code
+Form
+Stakeholder
+App module
+CONSENT-OOP-W
+Written informed consent - oldest old persons
+OOP
+Signature / left thumb impression workflow.
+CONSENT-OOP-O
+Oral consent script - low literacy / cognitive impairment
+OOP
+Read-aloud script, verbal assent recording, proxy flag.
+CONSENT-INST-NOC
+Institutional NOC
+Institutions
+NOC capture, signatory, anonymisation permission.
+CONSENT-KI
+Expert / key informant consent
+Officials, professionals, experts
+Audio consent and naming permission toggle.
+
+
+3. Primary Instruments Crosswalk
+Tool code
+Instrument
+Type
+Stakeholder
+CAS module
+SQ-OOP-v1.0
+Structured Questionnaire - Oldest Old Persons
+Quantitative
+OOP
+OOP questionnaire Sections A-H.
+SSI-OOP-v1.0
+Semi-Structured Interview - Oldest Old Persons
+Qualitative
+OOP
+5-theme interview guide.
+SSI-MoHUA/SPV-v1.0
+MoHUA Officials and SPV Officers
+Qualitative
+Government
+Expert interview module.
+SSI-UP-v1.0
+Urban planners and interface designers
+Qualitative
+Planners/designers
+Design and accessibility module.
+SSI-ICCC-v1.0
+ICCC operators and technology vendors
+Qualitative
+Technology
+ICCC service and data module.
+FI-MCO-v1.0
+Municipal ward-level officials
+Qualitative
+Government/frontline
+Municipal interview module.
+SSI-OAH-Admin-v1.0
+Old age home administrators
+Qual + document
+OAH
+Institution profile and interview.
+SSI-DLT-v1.0
+Digital literacy trainers
+Qual + data
+DLT
+Programme data module.
+SSI-NGO-v1.0
+NGOs and civil society
+Qualitative
+NGO
+NGO evidence module.
+SEI-Geri-v1.0
+Geriatricians and mental health professionals
+Expert qualitative
+Geriatricians
+Clinical expert module.
+EI-Legal-Ac-v1.0
+Constitutional law and elder rights scholars
+Expert qualitative
+Legal
+Legal expert module.
+SQ-CG + SSI-CG-v1.0
+Caregivers and family members
+Mixed
+Caregivers
+Caregiver structured + interview.
+FO-OOP-v1.0
+Field observation and shadowing
+Observational
+OOP / SCM settings
+Observation and heuristic log.
+FGD-OOP/CG-v1.0
+Focus group discussion
+Qualitative group
+OOP + caregivers
+FGD module.
+DOCTRINAL-v1.0
+Legal and policy document analysis
+Doctrinal
+PI/RA
+Doctrinal review module.
+QA-v1.0
+Quality assurance checklists
+Administrative
+All
+QA queue.
+ANNEXURES
+Crosswalk and city deployment matrix
+Administrative
+Project team
+Dashboard and planning module.
+
+
+4. SQ-OOP Internal Data Containing
+Section
+Data captured
+A
+Socio-demographic profile: age, gender, language, education, living arrangement, residence, health indicators, caregiving.
+B
+Digital device ownership and exposure.
+C
+Smart City Mission service awareness, use, assisted use, failed use, missed services.
+D
+Digital Anxiety Scale.
+E1
+Digital Dependency Frequency Index.
+E2
+Dignity Perception Scale.
+F
+Social isolation and intergenerational impact.
+G
+Digital literacy programmes and welfare scheme awareness.
+H
+Field investigator observation log.
+
+
+5. Stakeholder Matrix
+Stakeholder
+Why included
+Main tools
+Oldest Old Persons
+Primary affected group.
+SQ-OOP, SSI-OOP, FO-OOP, FGD.
+Caregivers / family
+Dependency and support burden.
+SQ-CG + SSI-CG, FGD.
+Old age home administrators
+Institutional support setting.
+SSI-OAH-Admin.
+NGOs / civil society
+Field evidence and advocacy.
+SSI-NGO.
+MoHUA / SPV officials
+Governance and SCM policy.
+SSI-MoHUA/SPV.
+Urban planners / designers
+Design assumptions and accessibility.
+SSI-UP.
+ICCC operators / tech vendors
+Backend systems, failure data, offline backup.
+SSI-ICCC.
+Municipal ward officials
+Last-mile delivery and offline alternatives.
+FI-MCO.
+Digital literacy trainers
+Programme design and training outcomes.
+SSI-DLT.
+Geriatricians / mental health professionals
+Cognitive, emotional, and physical impacts.
+SEI-Geri.
+Legal scholars
+Constitutional and elder-rights framework.
+EI-Legal-Ac, DOCTRINAL.
+
+
+6. City-wise Deployment Matrix
+City
+Core OOP tools
+Expert/institutional tools
+App configuration
+New Delhi
+SQ, SSI, FO, FGD
+MoHUA/SPV, planners, OAH, NGO, legal, geriatric
+Hindi/English/Urdu; Delhi Metro app, Delhi One app, EDMC e-services, Mohalla Clinic app, smart parking.
+Srinagar
+SQ, SSI, FO, FGD
+SPV, MCO, ICCC, OAH, NGO
+Kashmiri/Urdu/Hindi/English; bus shelters, Wi-Fi hotspots, ICCC grievance portal, smart waste.
+Aizawl
+SQ, SSI, FO, FGD
+SPV, MCO, ICCC, NGO, DLT
+Mizo/English/Hindi; solid waste tracking, sewerage monitoring, ICCC civic services.
+Chennai
+SQ, SSI, FO, FGD
+SPV, planners, OAH, geriatricians, DLT, NGO
+Tamil/English; smart roads, e-bus tracking, digital health centres, smart parks.
+Gandhinagar
+SQ, SSI, FO, FGD
+SPV, planners, ICCC, DLT, MCO
+Gujarati/Hindi/English; iNagar app, GIFT City services, smart health kiosks.
+Indore
+SQ, SSI, FO, FGD
+SPV, MCO, ICCC, NGO, DLT
+Hindi/English; 311 app, BRTS digital booking, ICCC grievance system, waste compliance.
+
+
+7. Pitfall Mitigation
+Pitfall
+App mitigation
+Consent treated as formality
+Consent gate, read-aloud mode, lock and audit log.
+Participant fatigue
+25-minute alert, pause/skip/end controls.
+Caregiver influences OOP answers
+Privacy checklist and separate caregiver module.
+SQ and SSI done together
+Hard block and 2-day gap validation.
+Audio without consent
+Audio button disabled.
+Audio retained
+Transcribe-review-delete pipeline.
+Institution disclosed
+Anonymise by default.
+City service mismatch
+City-specific service cards before fieldwork.
+Skips confused with missing data
+`S` code with reason.
+Translation inconsistency
+Language metadata and pre-test checklist.
+Observation becomes staged
+Real destination confirmation and non-intervention warning.
+FGD confidentiality risk
+No names; group-level reporting.
+Small subgroup reported
+Minimum cell size and aggregation.
+
+
+8. Ethical Safeguards
+Participation is voluntary.
+Participant may skip any question.
+Participant may stop at any time.
+Withdrawal has no negative consequence.
+Old age home care must not be affected.
+Institution NOC does not replace individual consent.
+No names in analysis export.
+No raw audio in final dataset.
+No exact address in instrument data.
+FGD data must be reported as group findings.
+Sensitive questions must have pause/skip/end options.
+9. Universal Data Fields
+{
+  "projectId": "SC-SC-ICSSR-2025-26",
+  "cityCode": "ND",
+  "toolCode": "SQ-OOP-v1.0",
+  "participantCode": "CAS-ND-OOP-2026-0001",
+  "fieldInvestigatorCode": "FI-ND-001",
+  "language": "Hindi",
+  "startedAt": 1730000000000,
+  "endedAt": 1730000000000,
+  "status": "completed",
+  "qaStatus": "pending"
+}
+
+
+10. Deployment Readiness Checklist
+☐ All 17 primary tools are present.
+☐ All 4 consent forms are present.
+☐ QA tools are mapped to the QA queue.
+☐ Annexures A1 and A2 are represented in admin dashboards.
+☐ City-specific service cards are configured.
+☐ Six-city language versions are planned.
+☐ Sensitive questions allow skip.
+☐ Audio deletion pipeline exists.
+☐ Institutional anonymisation is default.
+☐ Observation protocol includes non-intervention warning.
+☐ Export blocks withdrawn or QA-incomplete records.

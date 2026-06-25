@@ -1,3 +1,6 @@
 <resources>
-    <string name="app_name">CivicAge Survey (CAS)</string>
+    <string name="app_name">DCA Data Collection Application</string>
+    <string name="project_title">Smart Cities, Silent Citizens</string>
+    <string name="project_subtitle">ICSSR Major Research Project 2025-26</string>
+    <string name="center_name">Center for Urban Planning, NLID</string>
 </resources>

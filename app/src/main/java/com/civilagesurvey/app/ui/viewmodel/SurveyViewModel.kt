@@ -8,7 +8,7 @@ import com.civilagesurvey.app.audio.AudioRecorderHelper
 import com.civilagesurvey.app.audio.TextToSpeechHelper
 import com.civilagesurvey.app.config.Config
 import com.civilagesurvey.app.data.database.*
-import com.civilagesurvey.app.data.model.DefaultQuestions
+import com.civilagesurvey.app.data.model.*
 import com.civilagesurvey.app.data.repository.*
 import com.civilagesurvey.app.location.LocationHelper
 import com.squareup.moshi.Moshi
@@ -90,7 +90,18 @@ class SurveyViewModel(
     val activeSurveyUid = MutableStateFlow<String?>(null)
     val activeSurvey = MutableStateFlow<SurveyEntity?>(null)
 
+    // DCA Specific State
+    val selectedCity = MutableStateFlow("ND")
+    val selectedStakeholder = MutableStateFlow("OOP")
+    val participantSequence = MutableStateFlow(1)
+    val currentParticipantCode = combine(selectedCity, selectedStakeholder, participantSequence) { city, stakeholder, seq ->
+        val year = Calendar.getInstance().get(Calendar.YEAR)
+        "CAS-$city-$stakeholder-$year-${seq.toString().padStart(4, '0')}"
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
+
     // Questionnaire navigation state
+    val currentInstrument = MutableStateFlow<Instrument?>(null)
+    val currentSectionIndex = MutableStateFlow(0)
     val currentQuestionIndex = MutableStateFlow(0)
     
     val savedAnswers: StateFlow<Map<String, String>> = activeSurvey
@@ -250,30 +261,43 @@ class SurveyViewModel(
         return uid
     }
 
-    fun startNewSurveyForForm(formId: String): String {
-        val timestamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.getDefault()).format(Date())
-        val randomSuffix = (1000..9999).random()
-        val uid = "CAS-GF-$timestamp-$randomSuffix"
+    fun startDcaSession(instrument: Instrument) {
+        val pCode = currentParticipantCode.value
+        
+        // Protocol: SQ-OOP and SSI-OOP separation (2-day gap)
+        if (instrument.code == "SSI-OOP-v1.0") {
+            val hasSqToday = allSurveys.value.any { 
+                it.participantAgeGroup == "OOP" && 
+                it.surveyUid.contains("SQ-OOP-v1.0") &&
+                (System.currentTimeMillis() - it.createdAt) < (2 * 24 * 60 * 60 * 1000)
+            }
+            if (hasSqToday) {
+                authStatusMessage.value = "Minimum 2-day gap from SQ-OOP is required."
+                return
+            }
+        }
 
+        currentInstrument.value = instrument
+        currentSectionIndex.value = 0
         currentQuestionIndex.value = 0
-        interviewAnswers.value = emptyMap()
-
+        
+        val uid = "$pCode-${instrument.code}-S${System.currentTimeMillis()}"
+        
         val initialSurvey = SurveyEntity(
             surveyUid = uid,
             createdBy = surveyorId.value,
             status = "DRAFT",
-            linkedGoogleFormId = formId,
             surveyorId = surveyorId.value,
-            surveyorName = surveyorName.value
+            surveyorName = surveyorName.value,
+            participantAgeGroup = selectedStakeholder.value,
+            manualLocality = selectedCity.value // Temporarily using locality for city code
         )
-
+        
         viewModelScope.launch {
             repository.insertSurvey(initialSurvey)
             activeSurveyUid.value = uid
             activeSurvey.value = initialSurvey
         }
-
-        return uid
     }
 
     fun loadSurvey(uid: String) {
@@ -347,14 +371,24 @@ class SurveyViewModel(
     }
 
     fun moveToNextQuestion() {
-        if (currentQuestionIndex.value < (activeQuestions.value.size - 1)) {
+        val instrument = currentInstrument.value ?: return
+        val currentSection = instrument.sections.getOrNull(currentSectionIndex.value) ?: return
+        
+        if (currentQuestionIndex.value < currentSection.questions.size - 1) {
             currentQuestionIndex.value++
+        } else if (currentSectionIndex.value < instrument.sections.size - 1) {
+            currentSectionIndex.value++
+            currentQuestionIndex.value = 0
         }
     }
 
     fun moveToPreviousQuestion() {
         if (currentQuestionIndex.value > 0) {
             currentQuestionIndex.value--
+        } else if (currentSectionIndex.value > 0) {
+            currentSectionIndex.value--
+            val instrument = currentInstrument.value ?: return
+            currentQuestionIndex.value = (instrument.sections[currentSectionIndex.value].questions.size - 1).coerceAtLeast(0)
         }
     }
 
@@ -397,33 +431,40 @@ class SurveyViewModel(
         }
     }
 
-    fun finalizeSurvey() {
+    fun finalizeDcaSession() {
         val current = activeSurvey.value ?: return
         viewModelScope.launch(Dispatchers.IO) {
-            val updated = current.copy(status = "COMPLETED", updatedAt = System.currentTimeMillis())
+            // Anonymization: Ensure no names/phones in the export data
+            val anonymizedSurvey = current.copy(
+                participantName = "[Participant]",
+                participantAge = 0, // Age group is preserved in another field
+                surveyorName = "[Surveyor]",
+                surveyorEmail = "[Redacted]",
+                surveyorPhone = "[Redacted]",
+                status = "COMPLETED",
+                updatedAt = System.currentTimeMillis()
+            )
             
             // Generate local files
             val docsDir = context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS)
-            val jsonFile = File(docsDir, "${current.surveyUid}_export.json")
+            val jsonFile = File(docsDir, "${current.surveyUid}_anonymized.json")
             val txtFile = File(docsDir, "${current.surveyUid}_report.txt")
             
-            val jsonContent = exportSurveyToJson(updated)
-            val txtContent = buildReportText(updated)
+            val jsonContent = exportSurveyToJson(anonymizedSurvey)
+            val txtContent = buildReportText(anonymizedSurvey)
             
             jsonFile.writeText(jsonContent)
             txtFile.writeText(txtContent)
             
-            val finalSurvey = updated.copy(
+            val finalSurvey = anonymizedSurvey.copy(
                 jsonExportPath = jsonFile.absolutePath,
-                transcriptExportPath = txtFile.absolutePath
+                transcriptExportPath = txtFile.absolutePath,
+                isSynced = false // Mark for sync
             )
             repository.insertSurvey(finalSurvey)
             
-            // Try to sync to Firestore
-            val success = repository.syncSurveyToFirestore(finalSurvey)
-            if (success) {
-                repository.insertSurvey(finalSurvey.copy(isSynced = true, lastSyncedAt = System.currentTimeMillis()))
-            }
+            // Linkage file (Non-anonymized, encrypted - simplified here as local-only)
+            // In production, this would be encrypted and stored separately.
 
             withContext(Dispatchers.Main) {
                 activeSurvey.value = finalSurvey
@@ -464,6 +505,41 @@ class SurveyViewModel(
 
     fun getAnswersMap(json: String): Map<String, String> {
         return try { answersAdapter.fromJson(json) ?: emptyMap() } catch (e: Exception) { emptyMap() }
+    }
+
+    fun calculateDcaScores(answers: Map<String, String>): Map<String, Int> {
+        val anxietyScore = (1..10).sumOf { i ->
+            val valStr = answers["D$i"] ?: "Neither"
+            scoreFromLikert(valStr)
+        }
+        
+        // Reverse scoring for Dignity: E7, E9, E11 are negative/reverse
+        val dignityScore = (7..12).sumOf { i ->
+            val valStr = answers["E$i"] ?: "Neither"
+            val score = scoreFromLikert(valStr)
+            if (i == 7 || i == 9 || i == 11) 6 - score else score
+        }
+        
+        return mapOf("anxiety" to anxietyScore, "dignity" to dignityScore)
+    }
+
+    private fun scoreFromLikert(valStr: String): Int = when (valStr) {
+        "Strongly Disagree" -> 1
+        "Disagree" -> 2
+        "Neither" -> 3
+        "Agree" -> 4
+        "Strongly Agree" -> 5
+        else -> 3
+    }
+
+    fun getCitySpecificServices(): List<String> = when (selectedCity.value) {
+        "ND" -> listOf("Delhi Metro app", "Delhi One app", "EDMC e-services", "Mohalla Clinic app", "Smart parking")
+        "SG" -> listOf("Smart bus shelters", "Wi-Fi hotspots", "ICCC grievance portal", "Smart waste management")
+        "AZ" -> listOf("Smart solid waste tracking", "Sewerage monitoring portal", "ICCC civic services")
+        "CH" -> listOf("Smart road services", "E-bus tracking app", "Digital health centres", "Smart parks")
+        "GN" -> listOf("iNagar app", "GIFT City infrastructure services", "Smart health kiosks")
+        "IN" -> listOf("311 Smart City app", "BRTS digital booking", "ICCC grievance system", "Digital waste compliance")
+        else -> emptyList()
     }
 
     fun speakAloud(text: String) = ttsHelper.speak(text)
