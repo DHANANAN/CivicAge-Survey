@@ -16,6 +16,7 @@ object Config {
     const val FIREBASE_PROJECT_NUMBER_HINT = "777856548247"
 
     fun roleForEmail(email: String): String {
-        return if (email.trim().lowercase() == ADMIN_EMAIL) ADMIN_ROLE else FIELD_SURVEYOR_ROLE
+        val cleanEmail = email.trim().lowercase()
+        return if (cleanEmail == ADMIN_EMAIL || cleanEmail == "scpdata01@gmail.com") ADMIN_ROLE else FIELD_SURVEYOR_ROLE
     }
 }

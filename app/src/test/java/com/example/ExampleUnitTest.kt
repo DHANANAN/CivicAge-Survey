@@ -1,6 +1,6 @@
-package com.nlud.civilagesurvey
+package com.civilagesurvey.app
 
-import org.junit.Assert.*
+import org.junit.Assert.assertEquals
 import org.junit.Test
 
 /**

@@ -1,9 +1,9 @@
-package com.nlud.civilagesurvey
+package com.civilagesurvey.app
 
 import androidx.compose.material3.Text
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
-import com.nlud.civilagesurvey.ui.theme.MyApplicationTheme
+import com.civilagesurvey.app.ui.theme.DCATheme
 import com.github.takahirom.roborazzi.RobolectricDeviceQualifiers
 import com.github.takahirom.roborazzi.captureRoboImage
 import org.junit.Rule
@@ -23,7 +23,7 @@ class GreetingScreenshotTest {
   @Test
   fun greeting_screenshot() {
     composeTestRule.setContent { 
-      MyApplicationTheme { 
+      DCATheme { 
         Text("CivicAge Survey (CAS)") 
       } 
     }
@@ -31,4 +31,3 @@ class GreetingScreenshotTest {
     composeTestRule.onRoot().captureRoboImage(filePath = "src/test/screenshots/greeting.png")
   }
 }
-

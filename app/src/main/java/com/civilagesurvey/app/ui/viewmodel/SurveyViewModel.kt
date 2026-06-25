@@ -370,6 +370,27 @@ class SurveyViewModel(
         }
     }
 
+    fun saveConsentOptions(
+        consentGiven: Boolean,
+        audioConsent: Boolean,
+        geoConsent: Boolean,
+        withdrawalExplained: Boolean
+    ) {
+        val current = activeSurvey.value ?: return
+        val updated = current.copy(
+            consentGiven = consentGiven,
+            audioConsent = audioConsent,
+            geoLocationConsent = geoConsent,
+            participantCanWithdraw = withdrawalExplained,
+            consentTimestamp = System.currentTimeMillis(),
+            updatedAt = System.currentTimeMillis()
+        )
+        viewModelScope.launch {
+            repository.insertSurvey(updated)
+            activeSurvey.value = updated
+        }
+    }
+
     fun moveToNextQuestion() {
         val instrument = currentInstrument.value ?: return
         val currentSection = instrument.sections.getOrNull(currentSectionIndex.value) ?: return
@@ -405,8 +426,10 @@ class SurveyViewModel(
 
     private fun compileTranscripts() {
         val current = activeSurvey.value ?: return
+        val inst = currentInstrument.value
+        val prompts = inst?.themes?.map { it.openingQuestion } ?: interviewPrompts
         val compiled = buildString {
-            interviewPrompts.forEachIndexed { index, prompt ->
+            prompts.forEachIndexed { index, prompt ->
                 appendLine("Q: $prompt")
                 appendLine("A: ${interviewAnswers.value[index] ?: "No response"}")
                 appendLine()
@@ -420,7 +443,8 @@ class SurveyViewModel(
     }
 
     fun moveToNextInterview() {
-        if (currentInterviewIndex.value < interviewPrompts.size - 1) {
+        val limit = currentInstrument.value?.themes?.size ?: interviewPrompts.size
+        if (currentInterviewIndex.value < limit - 1) {
             currentInterviewIndex.value++
         }
     }

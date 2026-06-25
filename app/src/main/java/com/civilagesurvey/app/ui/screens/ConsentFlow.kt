@@ -21,6 +21,11 @@ fun ConsentFlowScreen(viewModel: SurveyViewModel, onConsentComplete: () -> Unit)
     var step by remember { mutableStateOf(1) }
     val stakeholder by viewModel.selectedStakeholder.collectAsState()
 
+    var mainConsent by remember { mutableStateOf(false) }
+    var audioConsent by remember { mutableStateOf(false) }
+    var geoConsent by remember { mutableStateOf(false) }
+    var withdrawalExplained by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -37,8 +42,25 @@ fun ConsentFlowScreen(viewModel: SurveyViewModel, onConsentComplete: () -> Unit)
         when (step) {
             1 -> ConsentIntroStep(stakeholder) { step = 2 }
             2 -> PrivacyAndWithdrawalStep { step = 3 }
-            3 -> ConsentCheckboxesStep(viewModel) { step = 4 }
-            4 -> SignatureStep { onConsentComplete() }
+            3 -> ConsentCheckboxesStep(
+                mainConsent = mainConsent,
+                onMainConsentChange = { mainConsent = it },
+                audioConsent = audioConsent,
+                onAudioConsentChange = { audioConsent = it },
+                geoConsent = geoConsent,
+                onGeoConsentChange = { geoConsent = it },
+                withdrawalExplained = withdrawalExplained,
+                onWithdrawalChange = { withdrawalExplained = it }
+            ) { step = 4 }
+            4 -> SignatureStep {
+                viewModel.saveConsentOptions(
+                    consentGiven = mainConsent,
+                    audioConsent = audioConsent,
+                    geoConsent = geoConsent,
+                    withdrawalExplained = withdrawalExplained
+                )
+                onConsentComplete()
+            }
         }
     }
 }
@@ -82,12 +104,17 @@ fun PrivacyAndWithdrawalStep(onNext: () -> Unit) {
 }
 
 @Composable
-fun ConsentCheckboxesStep(viewModel: SurveyViewModel, onNext: () -> Unit) {
-    var mainConsent by remember { mutableStateOf(false) }
-    var audioConsent by remember { mutableStateOf(false) }
-    var geoConsent by remember { mutableStateOf(false) }
-    var withdrawalExplained by remember { mutableStateOf(false) }
-
+fun ConsentCheckboxesStep(
+    mainConsent: Boolean,
+    onMainConsentChange: (Boolean) -> Unit,
+    audioConsent: Boolean,
+    onAudioConsentChange: (Boolean) -> Unit,
+    geoConsent: Boolean,
+    onGeoConsentChange: (Boolean) -> Unit,
+    withdrawalExplained: Boolean,
+    onWithdrawalChange: (Boolean) -> Unit,
+    onNext: () -> Unit
+) {
     Text(
         text = "Consent Options",
         style = MaterialTheme.typography.headlineSmall,
@@ -95,10 +122,10 @@ fun ConsentCheckboxesStep(viewModel: SurveyViewModel, onNext: () -> Unit) {
     )
     Spacer(modifier = Modifier.height(16.dp))
 
-    ConsentRow("I voluntarily agree to participate", mainConsent) { mainConsent = it }
-    ConsentRow("I consent to audio recording (Optional)", audioConsent) { audioConsent = it }
-    ConsentRow("I consent to geo-tagging (Optional)", geoConsent) { geoConsent = it }
-    ConsentRow("Withdrawal rights have been explained", withdrawalExplained) { withdrawalExplained = it }
+    ConsentRow("I voluntarily agree to participate", mainConsent, onMainConsentChange)
+    ConsentRow("I consent to audio recording (Optional)", audioConsent, onAudioConsentChange)
+    ConsentRow("I consent to geo-tagging (Optional)", geoConsent, onGeoConsentChange)
+    ConsentRow("Withdrawal rights have been explained", withdrawalExplained, onWithdrawalChange)
 
     Spacer(modifier = Modifier.height(32.dp))
     Button(

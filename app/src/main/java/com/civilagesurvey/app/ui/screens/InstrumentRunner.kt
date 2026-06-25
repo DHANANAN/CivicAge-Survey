@@ -1,5 +1,6 @@
 package com.civilagesurvey.app.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -10,12 +11,16 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.civilagesurvey.app.data.model.*
@@ -27,7 +32,7 @@ fun InstrumentRunnerScreen(viewModel: SurveyViewModel, onFinish: () -> Unit) {
     val instrument by viewModel.currentInstrument.collectAsState()
     val sectionIndex by viewModel.currentSectionIndex.collectAsState()
     val questionIndex by viewModel.currentQuestionIndex.collectAsState()
-    val sessionTime by remember { mutableStateOf(0L) } // Mock session timer
+    val interviewIndex by viewModel.currentInterviewIndex.collectAsState()
     
     var showBreakAlert by remember { mutableStateOf(false) }
 
@@ -40,19 +45,58 @@ fun InstrumentRunnerScreen(viewModel: SurveyViewModel, onFinish: () -> Unit) {
     }
 
     if (instrument == null) {
-        Text("No instrument selected")
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("No instrument selected", style = MaterialTheme.typography.titleLarge)
+        }
         return
+    }
+
+    val isQualitative = instrument!!.type == InstrumentType.QUALITATIVE
+
+    val isLast = remember(instrument, sectionIndex, questionIndex, interviewIndex) {
+        if (isQualitative) {
+            interviewIndex == (instrument!!.themes.size) - 1
+        } else {
+            val sect = instrument?.sections?.getOrNull(sectionIndex)
+            val isLastQuestion = questionIndex == (sect?.questions?.size ?: 0) - 1
+            val isLastSection = sectionIndex == (instrument?.sections?.size ?: 0) - 1
+            isLastQuestion && isLastSection
+        }
     }
 
     Scaffold(
         topBar = {
-            InstrumentTopBar(instrument!!, sectionIndex, onPause = {})
+            InstrumentTopBar(
+                instrument = instrument!!,
+                sectionIndex = sectionIndex,
+                interviewIndex = interviewIndex,
+                isQualitative = isQualitative,
+                onPause = { viewModel.stopSpeaking() }
+            )
         },
         bottomBar = {
             InstrumentBottomBar(
-                onBack = { viewModel.moveToPreviousQuestion() },
-                onNext = { viewModel.moveToNextQuestion() },
-                isLast = false // Logic for last question
+                onBack = {
+                    if (isQualitative) {
+                        viewModel.moveToPreviousInterview()
+                    } else {
+                        viewModel.moveToPreviousQuestion()
+                    }
+                },
+                onNext = {
+                    if (isLast) {
+                        viewModel.stopSpeaking()
+                        viewModel.finalizeDcaSession()
+                        onFinish()
+                    } else {
+                        if (isQualitative) {
+                            viewModel.moveToNextInterview()
+                        } else {
+                            viewModel.moveToNextQuestion()
+                        }
+                    }
+                },
+                isLast = isLast
             )
         }
     ) { padding ->
@@ -63,13 +107,22 @@ fun InstrumentRunnerScreen(viewModel: SurveyViewModel, onFinish: () -> Unit) {
                 .padding(24.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            val currentSection = instrument!!.sections.getOrNull(sectionIndex)
-            val currentQuestion = currentSection?.questions?.getOrNull(questionIndex)
-
-            if (currentQuestion != null) {
-                QuestionView(currentQuestion, viewModel)
+            if (isQualitative) {
+                val currentTheme = instrument!!.themes.getOrNull(interviewIndex)
+                if (currentTheme != null) {
+                    ThemeView(currentTheme, interviewIndex, viewModel)
+                } else {
+                    Text("End of themes", style = MaterialTheme.typography.bodyLarge)
+                }
             } else {
-                Text("End of section or instrument")
+                val currentSection = instrument!!.sections.getOrNull(sectionIndex)
+                val currentQuestion = currentSection?.questions?.getOrNull(questionIndex)
+
+                if (currentQuestion != null) {
+                    QuestionView(currentQuestion, viewModel)
+                } else {
+                    Text("End of section or instrument", style = MaterialTheme.typography.bodyLarge)
+                }
             }
         }
     }
@@ -81,17 +134,27 @@ fun InstrumentRunnerScreen(viewModel: SurveyViewModel, onFinish: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun InstrumentTopBar(instrument: Instrument, sectionIndex: Int, onPause: () -> Unit) {
+fun InstrumentTopBar(
+    instrument: Instrument,
+    sectionIndex: Int,
+    interviewIndex: Int,
+    isQualitative: Boolean,
+    onPause: () -> Unit
+) {
     TopAppBar(
         title = {
             Column {
                 Text(instrument.title, style = MaterialTheme.typography.titleMedium, maxLines = 1)
-                Text("Section ${instrument.sections.getOrNull(sectionIndex)?.code ?: ""}", style = MaterialTheme.typography.bodySmall)
+                Text(
+                    text = if (isQualitative) "Theme ${instrument.themes.getOrNull(interviewIndex)?.code ?: ""}"
+                           else "Section ${instrument.sections.getOrNull(sectionIndex)?.code ?: ""}",
+                    style = MaterialTheme.typography.bodySmall
+                )
             }
         },
         actions = {
             IconButton(onClick = onPause) {
-                Icon(Icons.Default.Pause, contentDescription = "Pause")
+                Icon(Icons.Default.Pause, contentDescription = "Pause / Stop Speech")
             }
         }
     )
@@ -125,16 +188,36 @@ fun InstrumentBottomBar(onBack: () -> Unit, onNext: () -> Unit, isLast: Boolean)
 fun QuestionView(question: Question, viewModel: SurveyViewModel) {
     var skipReason by remember { mutableStateOf<String?>(null) }
     var showSkipDialog by remember { mutableStateOf(false) }
+    val savedAnswers by viewModel.savedAnswers.collectAsState()
+    val currentAnswer = savedAnswers[question.id]
 
-    Text(
-        text = question.text,
-        style = MaterialTheme.typography.headlineMedium.copy(
-            fontSize = 22.sp,
-            fontWeight = FontWeight.Bold,
-            lineHeight = 32.sp
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text(
+            text = question.text,
+            style = MaterialTheme.typography.headlineMedium.copy(
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                lineHeight = 32.sp
+            ),
+            modifier = Modifier.weight(1f)
         )
-    )
+        IconButton(onClick = { viewModel.speakAloud(question.text) }) {
+            Icon(Icons.Default.VolumeUp, contentDescription = "Read Aloud", tint = MaterialTheme.colorScheme.primary)
+        }
+    }
     Spacer(modifier = Modifier.height(32.dp))
+
+    // Handle initial skip check from loaded answers
+    LaunchedEffect(currentAnswer) {
+        if (currentAnswer == "S" && skipReason == null) {
+            skipReason = "Skipped"
+        } else if (currentAnswer != "S" && currentAnswer != null) {
+            skipReason = null
+        }
+    }
 
     if (skipReason != null) {
         Card(
@@ -144,42 +227,111 @@ fun QuestionView(question: Question, viewModel: SurveyViewModel) {
             Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error)
                 Spacer(modifier = Modifier.width(12.dp))
-                Text("Skipped: $skipReason", color = MaterialTheme.colorScheme.onErrorContainer)
+                Text("Skipped question", color = MaterialTheme.colorScheme.onErrorContainer)
                 Spacer(modifier = Modifier.weight(1f))
-                TextButton(onClick = { skipReason = null }) { Text("Undo") }
+                TextButton(onClick = {
+                    skipReason = null
+                    viewModel.saveAnswer(question.id, "")
+                }) { Text("Undo") }
             }
         }
     } else {
         when (question.inputType) {
             InputType.SINGLE_CHOICE, InputType.LIKERT -> {
                 question.options.forEach { option ->
-                    SelectableOption(option, false) { viewModel.saveAnswer(question.id, option) }
+                    SelectableOption(option, option == currentAnswer) {
+                        viewModel.saveAnswer(question.id, option)
+                    }
+                }
+            }
+            InputType.MULTI_CHOICE -> {
+                val selectedOptions = remember(currentAnswer) {
+                    currentAnswer?.split("|")?.filter { it.isNotBlank() } ?: emptyList()
+                }
+                question.options.forEach { option ->
+                    val isChecked = selectedOptions.contains(option)
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp)
+                            .heightIn(min = 56.dp),
+                        onClick = {
+                            val newSelection = if (isChecked) {
+                                selectedOptions - option
+                            } else {
+                                selectedOptions + option
+                            }
+                            viewModel.saveAnswer(question.id, newSelection.joinToString("|"))
+                        },
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isChecked) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+                        ),
+                        border = if (isChecked) null else BorderStroke(1.dp, Color.LightGray)
+                    ) {
+                        Row(modifier = Modifier.fillMaxSize().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(checked = isChecked, onCheckedChange = null)
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(option, fontSize = 18.sp, fontWeight = if (isChecked) FontWeight.Bold else FontWeight.Normal)
+                        }
+                    }
                 }
             }
             InputType.TABLE -> {
                 if (question.citySpecific) {
                     val services = viewModel.getCitySpecificServices()
                     services.forEach { service ->
-                        Text(service, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 16.dp))
-                        // Simplified grid representation
-                        Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                            listOf("Heard", "Tried", "Used", "Help", "Never").forEach { opt ->
-                                FilterChip(selected = false, onClick = {}, label = { Text(opt) }, modifier = Modifier.padding(end = 4.dp))
+                        Text(service, fontWeight = FontWeight.Bold, fontSize = 18.sp, modifier = Modifier.padding(top = 16.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
+                        val columns = listOf(
+                            "heard" to "Heard",
+                            "tried" to "Tried",
+                            "alone" to "Used Alone",
+                            "help" to "Used with Help",
+                            "never" to "Never Used"
+                        )
+                        Row(modifier = Modifier.horizontalScroll(rememberScrollState()).padding(vertical = 4.dp)) {
+                            columns.forEach { (key, label) ->
+                                val cellId = "C_GRID_${service}_$key"
+                                val isSelected = savedAnswers[cellId] == "Yes"
+                                FilterChip(
+                                    selected = isSelected,
+                                    onClick = {
+                                        viewModel.saveAnswer(cellId, if (isSelected) "No" else "Yes")
+                                    },
+                                    label = { Text(label, fontSize = 14.sp) },
+                                    modifier = Modifier.padding(end = 8.dp)
+                                )
                             }
                         }
                     }
                 }
             }
-            InputType.TEXT, InputType.FREE_TEXT -> {
+            InputType.NUMBER -> {
+                var textValue by remember(currentAnswer) { mutableStateOf(currentAnswer ?: "") }
                 OutlinedTextField(
-                    value = "",
-                    onValueChange = { viewModel.saveAnswer(question.id, it) },
+                    value = textValue,
+                    onValueChange = {
+                        textValue = it
+                        viewModel.saveAnswer(question.id, it)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("Enter number...") }
+                )
+            }
+            InputType.TEXT, InputType.FREE_TEXT -> {
+                var textValue by remember(currentAnswer) { mutableStateOf(currentAnswer ?: "") }
+                OutlinedTextField(
+                    value = textValue,
+                    onValueChange = {
+                        textValue = it
+                        viewModel.saveAnswer(question.id, it)
+                    },
                     modifier = Modifier.fillMaxWidth().heightIn(min = 150.dp),
                     placeholder = { Text("Enter response here...") }
                 )
             }
             else -> {
-                Text("Input type ${question.inputType} not implemented yet")
+                Text("Input type ${question.inputType} not implemented yet", style = MaterialTheme.typography.bodyLarge)
             }
         }
     }
@@ -189,7 +341,7 @@ fun QuestionView(question: Question, viewModel: SurveyViewModel) {
     // Skip Logic Button
     if (question.isSkippable && skipReason == null) {
         TextButton(onClick = { showSkipDialog = true }) {
-            Text("Skip Question (S)", color = Color.Gray)
+            Text("Skip Question (S)", color = Color.Gray, fontSize = 16.sp)
         }
     }
 
@@ -202,6 +354,125 @@ fun QuestionView(question: Question, viewModel: SurveyViewModel) {
                 showSkipDialog = false
             }
         )
+    }
+}
+
+@Composable
+fun ThemeView(theme: InterviewTheme, index: Int, viewModel: SurveyViewModel) {
+    val interviewAnswers by viewModel.interviewAnswers.collectAsState()
+    val answerText = interviewAnswers[index] ?: ""
+    val activeSurvey by viewModel.activeSurvey.collectAsState()
+    val hasAudioConsent = activeSurvey?.audioConsent == true
+
+    val isRecording by viewModel.isRecording.collectAsState()
+    val recordingDuration by viewModel.recordingDuration.collectAsState()
+    val recordingState by viewModel.recordingState.collectAsState()
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text(
+            text = "Theme ${theme.code}: ${theme.title}",
+            style = MaterialTheme.typography.titleLarge.copy(
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            ),
+            modifier = Modifier.weight(1f)
+        )
+        IconButton(onClick = { viewModel.speakAloud("${theme.title}. ${theme.openingQuestion}") }) {
+            Icon(Icons.Default.VolumeUp, contentDescription = "Read Aloud", tint = MaterialTheme.colorScheme.primary)
+        }
+    }
+    
+    Spacer(modifier = Modifier.height(16.dp))
+
+    Text(
+        text = theme.openingQuestion,
+        style = MaterialTheme.typography.bodyLarge.copy(
+            fontSize = 18.sp,
+            lineHeight = 28.sp,
+            fontWeight = FontWeight.Medium
+        ),
+        modifier = Modifier.fillMaxWidth()
+    )
+
+    if (theme.probes.isNotEmpty()) {
+        Spacer(modifier = Modifier.height(16.dp))
+        Card(
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("Follow-up Probes:", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = MaterialTheme.colorScheme.secondary)
+                Spacer(modifier = Modifier.height(8.dp))
+                theme.probes.forEach { probe ->
+                    Row(modifier = Modifier.padding(vertical = 4.dp)) {
+                        Text("• ", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Text(probe, fontSize = 16.sp, lineHeight = 24.sp)
+                    }
+                }
+            }
+        }
+    }
+
+    Spacer(modifier = Modifier.height(24.dp))
+
+    OutlinedTextField(
+        value = answerText,
+        onValueChange = { viewModel.saveInterviewAnswer(index, it) },
+        modifier = Modifier.fillMaxWidth().heightIn(min = 150.dp),
+        label = { Text("Response Notes") },
+        placeholder = { Text("Type interview responses and observation notes here...") }
+    )
+
+    if (hasAudioConsent) {
+        Spacer(modifier = Modifier.height(24.dp))
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        ) {
+            Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        if (isRecording) Icons.Default.Mic else Icons.Default.MicOff,
+                        contentDescription = null,
+                        tint = if (isRecording) MaterialTheme.colorScheme.error else Color.Gray
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = if (isRecording) "Recording Voice... (${recordingDuration}s)" else "Voice Assistant ($recordingState)",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp
+                    )
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    if (!isRecording) {
+                        Button(
+                            onClick = { viewModel.startVoiceAnswer() },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                        ) {
+                            Text("Start Recording")
+                        }
+                    } else {
+                        Button(
+                            onClick = {
+                                viewModel.stopVoiceAnswer { text ->
+                                    val currentText = answerText
+                                    val updatedText = if (currentText.isBlank()) text else "$currentText\n$text"
+                                    viewModel.saveInterviewAnswer(index, updatedText)
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                        ) {
+                            Text("Stop & Transcribe")
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -246,7 +517,7 @@ fun SelectableOption(text: String, selected: Boolean, onClick: () -> Unit) {
         colors = CardDefaults.cardColors(
             containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
         ),
-        border = if (selected) null else androidx.compose.foundation.BorderStroke(1.dp, Color.LightGray)
+        border = if (selected) null else BorderStroke(1.dp, Color.LightGray)
     ) {
         Box(modifier = Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.CenterStart) {
             Text(text, fontSize = 18.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
