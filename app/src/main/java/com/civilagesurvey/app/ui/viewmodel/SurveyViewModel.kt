@@ -472,6 +472,15 @@ class SurveyViewModel(
         }
     }
 
+    fun finalizeSurvey() {
+        val current = activeSurvey.value ?: return
+        viewModelScope.launch {
+            val updated = current.copy(status = "COMPLETED", updatedAt = System.currentTimeMillis())
+            repository.insertSurvey(updated)
+            activeSurvey.value = updated
+        }
+    }
+
     private fun buildReportText(survey: SurveyEntity): String {
         return buildString {
             appendLine("CivicAge Survey (CAS) Report")
