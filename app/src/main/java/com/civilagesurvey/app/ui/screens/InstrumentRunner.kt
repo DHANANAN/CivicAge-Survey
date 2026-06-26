@@ -53,14 +53,12 @@ fun InstrumentRunnerScreen(viewModel: SurveyViewModel, onFinish: () -> Unit) {
 
     val isQualitative = instrument!!.type == InstrumentType.QUALITATIVE
 
-    val isLast = remember(instrument, sectionIndex, questionIndex, interviewIndex) {
+    val savedAnswers by viewModel.savedAnswers.collectAsState()
+    val isLast = remember(instrument, sectionIndex, questionIndex, interviewIndex, savedAnswers) {
         if (isQualitative) {
             interviewIndex == (instrument!!.themes.size) - 1
         } else {
-            val sect = instrument?.sections?.getOrNull(sectionIndex)
-            val isLastQuestion = questionIndex == (sect?.questions?.size ?: 0) - 1
-            val isLastSection = sectionIndex == (instrument?.sections?.size ?: 0) - 1
-            isLastQuestion && isLastSection
+            !viewModel.hasNextQuestion()
         }
     }
 
@@ -176,7 +174,7 @@ fun InstrumentBottomBar(onBack: () -> Unit, onNext: () -> Unit, isLast: Boolean)
             }
             Spacer(modifier = Modifier.width(16.dp))
             Button(onClick = onNext, modifier = Modifier.weight(1f).height(56.dp)) {
-                Text(if (isLast) "Finish" else "Next")
+                Text(if (isLast) "Submit" else "Next")
                 Spacer(modifier = Modifier.width(8.dp))
                 Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null)
             }

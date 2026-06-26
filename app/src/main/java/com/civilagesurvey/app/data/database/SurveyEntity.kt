@@ -26,8 +26,17 @@ data class SurveyEntity(
     val participantAge: Int = 0,
     val participantAgeGroup: String = "", // e.g., "75-79", "80-84", "85+"
     val participantGender: String = "",
+    val participantEmail: String = "",
+    val participantPhone: String = "",
     val participantPhotoLocalPath: String? = null,
     val participantVoiceSampleLocalPath: String? = null,
+
+    // Respondent / Caregiver Profile
+    val respondentName: String = "",
+    val respondentAge: Int = 0,
+    val respondentEmail: String = "",
+    val respondentPhone: String = "",
+    val respondentRelation: String = "",
 
     // Geo-Tagging
     val latitude: Double = 0.0,

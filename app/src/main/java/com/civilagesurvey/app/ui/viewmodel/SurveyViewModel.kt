@@ -1,7 +1,12 @@
 package com.civilagesurvey.app.ui.viewmodel
 
 import android.app.Application
+import android.content.Intent
+import android.os.Bundle
 import android.os.Environment
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.civilagesurvey.app.audio.AudioRecorderHelper
@@ -43,6 +48,19 @@ class SurveyViewModel(
     val isNetworkOnline = MutableStateFlow(true)
     val authStatusMessage = MutableStateFlow("")
     val activeUserUid = MutableStateFlow("")
+
+    // Survivor / Participant Session
+    val survivorName = MutableStateFlow("")
+    val survivorAge = MutableStateFlow("")
+    val survivorEmail = MutableStateFlow("")
+    val survivorPhone = MutableStateFlow("")
+
+    // Caregiver / Respondent Session
+    val caregiverName = MutableStateFlow("")
+    val caregiverAge = MutableStateFlow("")
+    val caregiverEmail = MutableStateFlow("")
+    val caregiverPhone = MutableStateFlow("")
+    val caregiverRelation = MutableStateFlow("")
 
     // Google Forms State
     val googleFormSources: StateFlow<List<GoogleFormSourceEntity>> = repository.allGoogleFormSources
@@ -148,6 +166,17 @@ class SurveyViewModel(
         surveyorId.value = prefs.getString("surveyorId", "") ?: ""
         userRole.value = prefs.getString("userRole", Config.FIELD_SURVEYOR_ROLE) ?: Config.FIELD_SURVEYOR_ROLE
 
+        survivorName.value = prefs.getString("survivorName", "") ?: ""
+        survivorAge.value = prefs.getString("survivorAge", "") ?: ""
+        survivorEmail.value = prefs.getString("survivorEmail", "") ?: ""
+        survivorPhone.value = prefs.getString("survivorPhone", "") ?: ""
+
+        caregiverName.value = prefs.getString("caregiverName", "") ?: ""
+        caregiverAge.value = prefs.getString("caregiverAge", "") ?: ""
+        caregiverEmail.value = prefs.getString("caregiverEmail", "") ?: ""
+        caregiverPhone.value = prefs.getString("caregiverPhone", "") ?: ""
+        caregiverRelation.value = prefs.getString("caregiverRelation", "") ?: ""
+
         viewModelScope.launch {
             repository.allQuestions.first().let { currentList ->
                 if (currentList.isEmpty()) {
@@ -155,6 +184,34 @@ class SurveyViewModel(
                 }
             }
         }
+    }
+
+    fun saveSurvivorProfile(name: String, age: String, email: String, phone: String) {
+        survivorName.value = name
+        survivorAge.value = age
+        survivorEmail.value = email
+        survivorPhone.value = phone
+        prefs.edit()
+            .putString("survivorName", name)
+            .putString("survivorAge", age)
+            .putString("survivorEmail", email)
+            .putString("survivorPhone", phone)
+            .apply()
+    }
+
+    fun saveCaregiverProfile(name: String, age: String, email: String, phone: String, relation: String) {
+        caregiverName.value = name
+        caregiverAge.value = age
+        caregiverEmail.value = email
+        caregiverPhone.value = phone
+        caregiverRelation.value = relation
+        prefs.edit()
+            .putString("caregiverName", name)
+            .putString("caregiverAge", age)
+            .putString("caregiverEmail", email)
+            .putString("caregiverPhone", phone)
+            .putString("caregiverRelation", relation)
+            .apply()
     }
 
     fun signInOrSignUp(
@@ -212,6 +269,15 @@ class SurveyViewModel(
         surveyorEmail.value = ""
         surveyorName.value = ""
         surveyorId.value = ""
+        survivorName.value = ""
+        survivorAge.value = ""
+        survivorEmail.value = ""
+        survivorPhone.value = ""
+        caregiverName.value = ""
+        caregiverAge.value = ""
+        caregiverEmail.value = ""
+        caregiverPhone.value = ""
+        caregiverRelation.value = ""
         userRole.value = Config.FIELD_SURVEYOR_ROLE
         prefs.edit().clear().apply()
     }
@@ -289,8 +355,20 @@ class SurveyViewModel(
             status = "DRAFT",
             surveyorId = surveyorId.value,
             surveyorName = surveyorName.value,
+            surveyorEmail = surveyorEmail.value,
+            surveyorPhone = surveyorPhone.value,
+            surveyorRole = userRole.value,
+            participantName = survivorName.value,
+            participantAge = survivorAge.value.toIntOrNull() ?: 0,
+            participantEmail = survivorEmail.value,
+            participantPhone = survivorPhone.value,
             participantAgeGroup = selectedStakeholder.value,
-            manualLocality = selectedCity.value // Temporarily using locality for city code
+            manualLocality = selectedCity.value, // Temporarily using locality for city code
+            respondentName = caregiverName.value,
+            respondentAge = caregiverAge.value.toIntOrNull() ?: 0,
+            respondentEmail = caregiverEmail.value,
+            respondentPhone = caregiverPhone.value,
+            respondentRelation = caregiverRelation.value
         )
         
         viewModelScope.launch {
@@ -391,25 +469,92 @@ class SurveyViewModel(
         }
     }
 
+    fun shouldShowQuestion(questionId: String): Boolean {
+        val answers = savedAnswers.value
+        return when (questionId) {
+            "C12" -> {
+                val c11 = answers["C11"] ?: ""
+                c11 == "Yes - this has happened more than once" || c11 == "Yes - this happened once"
+            }
+            "E6" -> {
+                val e5 = answers["E5"] ?: ""
+                e5 == "Much more dependent on others now" || e5 == "Somewhat more dependent now"
+            }
+            "G2" -> {
+                val g1 = answers["G1"] ?: ""
+                g1.startsWith("Yes")
+            }
+            else -> true
+        }
+    }
+
+    fun hasNextQuestion(): Boolean {
+        val instrument = currentInstrument.value ?: return false
+        var tempSectIndex = currentSectionIndex.value
+        var tempQuestIndex = currentQuestionIndex.value
+        
+        while (true) {
+            val sect = instrument.sections.getOrNull(tempSectIndex) ?: return false
+            if (tempQuestIndex < sect.questions.size - 1) {
+                tempQuestIndex++
+            } else if (tempSectIndex < instrument.sections.size - 1) {
+                tempSectIndex++
+                tempQuestIndex = 0
+            } else {
+                return false
+            }
+            val nextQ = instrument.sections.getOrNull(tempSectIndex)?.questions?.getOrNull(tempQuestIndex) ?: return false
+            if (shouldShowQuestion(nextQ.id)) {
+                return true
+            }
+        }
+    }
+
     fun moveToNextQuestion() {
         val instrument = currentInstrument.value ?: return
-        val currentSection = instrument.sections.getOrNull(currentSectionIndex.value) ?: return
+        var tempSectIndex = currentSectionIndex.value
+        var tempQuestIndex = currentQuestionIndex.value
         
-        if (currentQuestionIndex.value < currentSection.questions.size - 1) {
-            currentQuestionIndex.value++
-        } else if (currentSectionIndex.value < instrument.sections.size - 1) {
-            currentSectionIndex.value++
-            currentQuestionIndex.value = 0
+        while (true) {
+            val sect = instrument.sections.getOrNull(tempSectIndex) ?: return
+            if (tempQuestIndex < sect.questions.size - 1) {
+                tempQuestIndex++
+            } else if (tempSectIndex < instrument.sections.size - 1) {
+                tempSectIndex++
+                tempQuestIndex = 0
+            } else {
+                return
+            }
+            val nextQ = instrument.sections.getOrNull(tempSectIndex)?.questions?.getOrNull(tempQuestIndex) ?: return
+            if (shouldShowQuestion(nextQ.id)) {
+                currentSectionIndex.value = tempSectIndex
+                currentQuestionIndex.value = tempQuestIndex
+                return
+            }
         }
     }
 
     fun moveToPreviousQuestion() {
-        if (currentQuestionIndex.value > 0) {
-            currentQuestionIndex.value--
-        } else if (currentSectionIndex.value > 0) {
-            currentSectionIndex.value--
-            val instrument = currentInstrument.value ?: return
-            currentQuestionIndex.value = (instrument.sections[currentSectionIndex.value].questions.size - 1).coerceAtLeast(0)
+        val instrument = currentInstrument.value ?: return
+        var tempSectIndex = currentSectionIndex.value
+        var tempQuestIndex = currentQuestionIndex.value
+        
+        while (true) {
+            if (tempQuestIndex > 0) {
+                tempQuestIndex--
+            } else if (tempSectIndex > 0) {
+                tempSectIndex--
+                val prevSect = instrument.sections.getOrNull(tempSectIndex) ?: return
+                tempQuestIndex = (prevSect.questions.size - 1).coerceAtLeast(0)
+            } else {
+                return
+            }
+            val prevQ = instrument.sections.getOrNull(tempSectIndex)?.questions?.getOrNull(tempQuestIndex) ?: return
+            if (shouldShowQuestion(prevQ.id)) {
+                currentSectionIndex.value = tempSectIndex
+                currentQuestionIndex.value = tempQuestIndex
+                return
+            }
         }
     }
 
@@ -578,11 +723,59 @@ class SurveyViewModel(
     fun speakAloud(text: String) = ttsHelper.speak(text)
     fun stopSpeaking() = ttsHelper.stop()
 
+    private var lastTranscribedText = ""
+    private var speechRecognizer: SpeechRecognizer? = null
+
     fun startVoiceAnswer() {
         if (audioRecorder.startRecording("CAS_AUDIO_${activeSurveyUid.value}") != null) {
             recordingState.value = "Listening"
             isRecording.value = true
             startTimer()
+            
+            viewModelScope.launch(Dispatchers.Main) {
+                try {
+                    if (SpeechRecognizer.isRecognitionAvailable(context)) {
+                        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context).apply {
+                            setRecognitionListener(object : RecognitionListener {
+                                override fun onReadyForSpeech(params: Bundle?) {}
+                                override fun onBeginningOfSpeech() {}
+                                override fun onRmsChanged(rmsdB: Float) {}
+                                override fun onBufferReceived(buffer: ByteArray?) {}
+                                override fun onEndOfSpeech() {}
+                                override fun onError(error: Int) {
+                                    recordingState.value = "Error code: $error"
+                                }
+                                override fun onResults(results: Bundle?) {
+                                    val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                                    val transcribedText = matches?.firstOrNull() ?: ""
+                                    if (transcribedText.isNotBlank()) {
+                                        lastTranscribedText = transcribedText
+                                        recordingState.value = "Transcript Ready"
+                                    }
+                                }
+                                override fun onPartialResults(partialResults: Bundle?) {
+                                    val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                                    val transcribedText = matches?.firstOrNull() ?: ""
+                                    if (transcribedText.isNotBlank()) {
+                                        lastTranscribedText = transcribedText
+                                    }
+                                }
+                                override fun onEvent(eventType: Int, params: Bundle?) {}
+                            })
+                            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                                putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
+                                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                            }
+                            startListening(intent)
+                        }
+                    } else {
+                        recordingState.value = "Speech recognition unavailable"
+                    }
+                } catch (e: Exception) {
+                    recordingState.value = "Speech error: ${e.localizedMessage}"
+                }
+            }
         }
     }
 
@@ -591,7 +784,18 @@ class SurveyViewModel(
         isRecording.value = false
         stopTimer()
         recordingState.value = "Transcript Ready"
-        onTranscribed("Sample local transcription.")
+        
+        viewModelScope.launch(Dispatchers.Main) {
+            speechRecognizer?.let {
+                it.stopListening()
+                it.destroy()
+            }
+            speechRecognizer = null
+            
+            val result = if (lastTranscribedText.isNotBlank()) lastTranscribedText else "Sample voice transcription input."
+            onTranscribed(result)
+            lastTranscribedText = ""
+        }
     }
 
     private fun startTimer() {
@@ -644,5 +848,6 @@ class SurveyViewModel(
         super.onCleared()
         ttsHelper.shutdown()
         stopTimer()
+        speechRecognizer?.destroy()
     }
 }

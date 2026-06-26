@@ -131,35 +131,103 @@ fun MainSurveyApp(viewModel: SurveyViewModel) {
 
 @Composable
 fun LoginScreen(viewModel: SurveyViewModel, onLogin: () -> Unit) {
-    var email by remember { mutableStateOf("") }
-    var name by remember { mutableStateOf("") }
-    var id by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf(viewModel.surveyorEmail.value) }
+    var name by remember { mutableStateOf(viewModel.surveyorName.value) }
+    var id by remember { mutableStateOf(viewModel.surveyorId.value) }
+    var phone by remember { mutableStateOf(viewModel.surveyorPhone.value) }
+
+    var subvName by remember { mutableStateOf(viewModel.survivorName.value) }
+    var subvAge by remember { mutableStateOf(viewModel.survivorAge.value) }
+    var subvEmail by remember { mutableStateOf(viewModel.survivorEmail.value) }
+    var subvPhone by remember { mutableStateOf(viewModel.survivorPhone.value) }
+
+    var cgName by remember { mutableStateOf(viewModel.caregiverName.value) }
+    var cgAge by remember { mutableStateOf(viewModel.caregiverAge.value) }
+    var cgEmail by remember { mutableStateOf(viewModel.caregiverEmail.value) }
+    var cgPhone by remember { mutableStateOf(viewModel.caregiverPhone.value) }
+    var cgRelation by remember { mutableStateOf(viewModel.caregiverRelation.value) }
+
+    var activeTab by remember { mutableStateOf(0) }
     val context = LocalContext.current
 
-    Column(modifier = Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-        Icon(Icons.Default.LocationCity, contentDescription = null, modifier = Modifier.size(80.dp), tint = MaterialTheme.colorScheme.primary)
+    Column(modifier = Modifier.fillMaxSize().padding(24.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+        Icon(Icons.Default.LocationCity, contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.primary)
+        Spacer(modifier = Modifier.height(12.dp))
+        Text("DCA", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.ExtraBold)
+        Text("Data Collection Application", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
         Spacer(modifier = Modifier.height(16.dp))
-        Text("DCA", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.ExtraBold)
-        Text("Data Collection Application", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
-        Spacer(modifier = Modifier.height(8.dp))
-        Text("Center for Urban Planning, NLID", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
-        
-        Spacer(modifier = Modifier.height(40.dp))
-        OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Full Name") }, modifier = Modifier.fillMaxWidth())
-        Spacer(modifier = Modifier.height(12.dp))
-        OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("Email") }, modifier = Modifier.fillMaxWidth())
-        Spacer(modifier = Modifier.height(12.dp))
-        OutlinedTextField(value = id, onValueChange = { id = it }, label = { Text("Surveyor ID") }, modifier = Modifier.fillMaxWidth())
-        
+
+        TabRow(selectedTabIndex = activeTab, modifier = Modifier.fillMaxWidth()) {
+            Tab(selected = activeTab == 0, onClick = { activeTab = 0 }, text = { Text("1. Surveyor", fontSize = 12.sp) })
+            Tab(selected = activeTab == 1, onClick = { activeTab = 1 }, text = { Text("2. Survivor", fontSize = 12.sp) })
+            Tab(selected = activeTab == 2, onClick = { activeTab = 2 }, text = { Text("3. Respondent", fontSize = 12.sp) })
+        }
+
         Spacer(modifier = Modifier.height(24.dp))
+
+        when (activeTab) {
+            0 -> {
+                Text("Surveyor Profile", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Surveyor Full Name *") }, modifier = Modifier.fillMaxWidth())
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("Surveyor Email *") }, modifier = Modifier.fillMaxWidth())
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedTextField(value = id, onValueChange = { id = it }, label = { Text("Surveyor ID *") }, modifier = Modifier.fillMaxWidth())
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedTextField(value = phone, onValueChange = { phone = it }, label = { Text("Surveyor Phone") }, modifier = Modifier.fillMaxWidth())
+            }
+            1 -> {
+                Text("Survivor (Participant) Profile", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedTextField(value = subvName, onValueChange = { subvName = it }, label = { Text("Survivor Full Name *") }, modifier = Modifier.fillMaxWidth())
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedTextField(value = subvAge, onValueChange = { subvAge = it }, label = { Text("Survivor Age *") }, modifier = Modifier.fillMaxWidth())
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedTextField(value = subvEmail, onValueChange = { subvEmail = it }, label = { Text("Survivor Contact Email") }, modifier = Modifier.fillMaxWidth())
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedTextField(value = subvPhone, onValueChange = { subvPhone = it }, label = { Text("Survivor Mobile Number") }, modifier = Modifier.fillMaxWidth())
+            }
+            2 -> {
+                Text("Caregiver / Respondent Profile", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedTextField(value = cgName, onValueChange = { cgName = it }, label = { Text("Respondent Full Name *") }, modifier = Modifier.fillMaxWidth())
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedTextField(value = cgAge, onValueChange = { cgAge = it }, label = { Text("Respondent Age *") }, modifier = Modifier.fillMaxWidth())
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedTextField(value = cgEmail, onValueChange = { cgEmail = it }, label = { Text("Respondent Contact Email") }, modifier = Modifier.fillMaxWidth())
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedTextField(value = cgPhone, onValueChange = { cgPhone = it }, label = { Text("Respondent Mobile Number") }, modifier = Modifier.fillMaxWidth())
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedTextField(value = cgRelation, onValueChange = { cgRelation = it }, label = { Text("Relation to Survivor (e.g. Spouse/Child/Paid Caregiver) *") }, modifier = Modifier.fillMaxWidth())
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(32.dp))
         Button(onClick = {
-            if (name.isNotBlank() && email.contains("@") && id.isNotBlank()) {
-                viewModel.signInOrSignUp(email, "", name, id, "", false) { _, _ -> onLogin() }
+            if (activeTab < 2) {
+                activeTab++
             } else {
-                Toast.makeText(context, "Please fill all fields correctly", Toast.LENGTH_SHORT).show()
+                if (name.isNotBlank() && email.contains("@") && id.isNotBlank() &&
+                    subvName.isNotBlank() && subvAge.isNotBlank() &&
+                    cgName.isNotBlank() && cgAge.isNotBlank() && cgRelation.isNotBlank()) {
+                    
+                    viewModel.saveSurvivorProfile(subvName, subvAge, subvEmail, subvPhone)
+                    viewModel.saveCaregiverProfile(cgName, cgAge, cgEmail, cgPhone, cgRelation)
+                    
+                    viewModel.signInOrSignUp(email, "", name, id, phone, false) { _, _ -> onLogin() }
+                } else {
+                    Toast.makeText(context, "Please fill all required (*) fields", Toast.LENGTH_LONG).show()
+                }
             }
         }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
-            Text("Access Dashboard", fontWeight = FontWeight.Bold)
+            Text(if (activeTab < 2) "Next Profile" else "Access Dashboard", fontWeight = FontWeight.Bold)
+        }
+        if (activeTab > 0) {
+            Spacer(modifier = Modifier.height(12.dp))
+            OutlinedButton(onClick = { activeTab-- }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
+                Text("Previous Profile", fontWeight = FontWeight.Bold)
+            }
         }
     }
 }
