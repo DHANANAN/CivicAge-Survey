@@ -51,15 +51,11 @@ fun InstrumentRunnerScreen(viewModel: SurveyViewModel, onFinish: () -> Unit) {
         return
     }
 
-    val isQualitative = instrument!!.type == InstrumentType.QUALITATIVE
+    val showThemes by viewModel.showThemesPhase.collectAsState()
 
     val savedAnswers by viewModel.savedAnswers.collectAsState()
-    val isLast = remember(instrument, sectionIndex, questionIndex, interviewIndex, savedAnswers) {
-        if (isQualitative) {
-            interviewIndex == (instrument!!.themes.size) - 1
-        } else {
-            !viewModel.hasNextQuestion()
-        }
+    val isLast = remember(instrument, sectionIndex, questionIndex, interviewIndex, showThemes, savedAnswers) {
+        !viewModel.hasNextStep()
     }
 
     Scaffold(
@@ -68,18 +64,14 @@ fun InstrumentRunnerScreen(viewModel: SurveyViewModel, onFinish: () -> Unit) {
                 instrument = instrument!!,
                 sectionIndex = sectionIndex,
                 interviewIndex = interviewIndex,
-                isQualitative = isQualitative,
+                isQualitative = showThemes,
                 onPause = { viewModel.stopSpeaking() }
             )
         },
         bottomBar = {
             InstrumentBottomBar(
                 onBack = {
-                    if (isQualitative) {
-                        viewModel.moveToPreviousInterview()
-                    } else {
-                        viewModel.moveToPreviousQuestion()
-                    }
+                    viewModel.moveToPreviousStep()
                 },
                 onNext = {
                     if (isLast) {
@@ -87,11 +79,7 @@ fun InstrumentRunnerScreen(viewModel: SurveyViewModel, onFinish: () -> Unit) {
                         viewModel.finalizeDcaSession()
                         onFinish()
                     } else {
-                        if (isQualitative) {
-                            viewModel.moveToNextInterview()
-                        } else {
-                            viewModel.moveToNextQuestion()
-                        }
+                        viewModel.moveToNextStep()
                     }
                 },
                 isLast = isLast
@@ -105,7 +93,7 @@ fun InstrumentRunnerScreen(viewModel: SurveyViewModel, onFinish: () -> Unit) {
                 .padding(24.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            if (isQualitative) {
+            if (showThemes) {
                 val currentTheme = instrument!!.themes.getOrNull(interviewIndex)
                 if (currentTheme != null) {
                     ThemeView(currentTheme, interviewIndex, viewModel)

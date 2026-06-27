@@ -121,6 +121,12 @@ class SurveyViewModel(
     val currentInstrument = MutableStateFlow<Instrument?>(null)
     val currentSectionIndex = MutableStateFlow(0)
     val currentQuestionIndex = MutableStateFlow(0)
+    val showThemesPhase = MutableStateFlow(false)
+    val intakeLatitude = MutableStateFlow(0.0)
+    val intakeLongitude = MutableStateFlow(0.0)
+    val intakeAccuracy = MutableStateFlow(0.0f)
+    val intakeCapturedTime = MutableStateFlow(0L)
+    val intakeLocationStatus = MutableStateFlow("")
     
     val savedAnswers: StateFlow<Map<String, String>> = activeSurvey
         .map { survey -> survey?.let { getAnswersMap(it.answersJson) } ?: emptyMap() }
@@ -327,7 +333,13 @@ class SurveyViewModel(
         return uid
     }
 
-    fun startDcaSession(instrument: Instrument) {
+    fun startDcaSession(
+        instrument: Instrument,
+        rName: String,
+        rAge: String,
+        rMobile: String,
+        rCity: String
+    ) {
         val pCode = currentParticipantCode.value
         
         // Protocol: SQ-OOP and SSI-OOP separation (2-day gap)
@@ -346,9 +358,16 @@ class SurveyViewModel(
         currentInstrument.value = instrument
         currentSectionIndex.value = 0
         currentQuestionIndex.value = 0
+        currentInterviewIndex.value = 0
+        showThemesPhase.value = instrument.sections.isEmpty() && instrument.themes.isNotEmpty()
         
         val uid = "$pCode-${instrument.code}-S${System.currentTimeMillis()}"
         
+        val answersMap = mutableMapOf<String, String>()
+        answersMap["__intake_location_status"] = intakeLocationStatus.value
+        answersMap["__intake_captured_time"] = intakeCapturedTime.value.toString()
+        val answersJsonStr = answersAdapter.toJson(answersMap) ?: "{}"
+
         val initialSurvey = SurveyEntity(
             surveyUid = uid,
             createdBy = surveyorId.value,
@@ -358,17 +377,21 @@ class SurveyViewModel(
             surveyorEmail = surveyorEmail.value,
             surveyorPhone = surveyorPhone.value,
             surveyorRole = userRole.value,
-            participantName = survivorName.value,
-            participantAge = survivorAge.value.toIntOrNull() ?: 0,
-            participantEmail = survivorEmail.value,
-            participantPhone = survivorPhone.value,
+            participantName = rName,
+            participantAge = rAge.toIntOrNull() ?: 0,
+            participantPhone = rMobile,
+            participantEmail = "",
             participantAgeGroup = selectedStakeholder.value,
-            manualLocality = selectedCity.value, // Temporarily using locality for city code
-            respondentName = caregiverName.value,
-            respondentAge = caregiverAge.value.toIntOrNull() ?: 0,
-            respondentEmail = caregiverEmail.value,
-            respondentPhone = caregiverPhone.value,
-            respondentRelation = caregiverRelation.value
+            manualLocality = rCity,
+            respondentName = rName,
+            respondentAge = rAge.toIntOrNull() ?: 0,
+            respondentEmail = "",
+            respondentPhone = rMobile,
+            respondentRelation = "Self",
+            latitude = intakeLatitude.value,
+            longitude = intakeLongitude.value,
+            gpsAccuracy = intakeAccuracy.value,
+            answersJson = answersJsonStr
         )
         
         viewModelScope.launch {
@@ -421,6 +444,23 @@ class SurveyViewModel(
                     repository.insertSurvey(updated)
                     activeSurvey.value = updated
                 }
+            }
+        }
+    }
+
+    fun fetchIntakeLocation() {
+        isFetchingGps.value = true
+        intakeLocationStatus.value = "Fetching..."
+        locationHelper.getCurrentLocation { loc ->
+            isFetchingGps.value = false
+            if (loc != null) {
+                intakeLatitude.value = loc.latitude
+                intakeLongitude.value = loc.longitude
+                intakeAccuracy.value = loc.accuracy
+                intakeCapturedTime.value = System.currentTimeMillis()
+                intakeLocationStatus.value = "Success"
+            } else {
+                intakeLocationStatus.value = "Permission denied or GPS disabled"
             }
         }
     }
@@ -485,6 +525,70 @@ class SurveyViewModel(
                 g1.startsWith("Yes")
             }
             else -> true
+        }
+    }
+
+    fun hasNextStep(): Boolean {
+        val instrument = currentInstrument.value ?: return false
+        if (showThemesPhase.value) {
+            return currentInterviewIndex.value < instrument.themes.size - 1
+        } else {
+            if (hasNextQuestion()) {
+                return true
+            } else {
+                return instrument.themes.isNotEmpty()
+            }
+        }
+    }
+
+    fun moveToNextStep() {
+        val instrument = currentInstrument.value ?: return
+        if (showThemesPhase.value) {
+            if (currentInterviewIndex.value < instrument.themes.size - 1) {
+                currentInterviewIndex.value++
+            }
+        } else {
+            if (hasNextQuestion()) {
+                moveToNextQuestion()
+            } else if (instrument.themes.isNotEmpty()) {
+                showThemesPhase.value = true
+                currentInterviewIndex.value = 0
+            }
+        }
+    }
+
+    fun moveToPreviousStep() {
+        val instrument = currentInstrument.value ?: return
+        if (showThemesPhase.value) {
+            if (currentInterviewIndex.value > 0) {
+                currentInterviewIndex.value--
+            } else if (instrument.sections.isNotEmpty()) {
+                showThemesPhase.value = false
+                goToLastSectionQuestion(instrument)
+            }
+        } else {
+            moveToPreviousQuestion()
+        }
+    }
+
+    private fun goToLastSectionQuestion(instrument: Instrument) {
+        var tempSectIndex = instrument.sections.size - 1
+        var tempQuestIndex = (instrument.sections.getOrNull(tempSectIndex)?.questions?.size ?: 1) - 1
+        
+        while (tempSectIndex >= 0) {
+            val sect = instrument.sections.getOrNull(tempSectIndex)
+            if (sect != null && tempQuestIndex >= 0) {
+                val q = sect.questions.getOrNull(tempQuestIndex)
+                if (q != null && shouldShowQuestion(q.id)) {
+                    currentSectionIndex.value = tempSectIndex
+                    currentQuestionIndex.value = tempQuestIndex
+                    return
+                }
+                tempQuestIndex--
+            } else {
+                tempSectIndex--
+                tempQuestIndex = (instrument.sections.getOrNull(tempSectIndex)?.questions?.size ?: 1) - 1
+            }
         }
     }
 
@@ -842,6 +946,83 @@ class SurveyViewModel(
     fun transmitSurveyViaEmail(survey: SurveyEntity, recipient: String, onResult: (String) -> Unit) {
         // Logic for email intent is in UI
         onResult("Email intent triggered.")
+    }
+
+    fun buildDetailedReportText(survey: SurveyEntity): String {
+        return buildString {
+            appendLine("=========================================")
+            appendLine("        CIVICAGE SURVEY REPORT           ")
+            appendLine("=========================================")
+            appendLine("Record UID: ${survey.surveyUid}")
+            appendLine("Surveyor: ${survey.surveyorName} (ID: ${survey.surveyorId}, Email: ${survey.surveyorEmail})")
+            appendLine("Date: ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(survey.createdAt))}")
+            appendLine("City/Locality: ${survey.manualLocality}")
+            appendLine("-----------------------------------------")
+            appendLine("RESPONDENT DETAILS:")
+            appendLine("Name: ${survey.participantName}")
+            appendLine("Age: ${survey.participantAge}")
+            appendLine("Mobile: ${survey.participantPhone}")
+            if (survey.latitude != 0.0 || survey.longitude != 0.0) {
+                appendLine("Location: Lat ${survey.latitude}, Lng ${survey.longitude} (Accuracy: ${survey.gpsAccuracy}m)")
+            } else {
+                appendLine("Location: Not Captured")
+            }
+            appendLine("-----------------------------------------")
+            
+            // Decoded Answers
+            val answers = getAnswersMap(survey.answersJson)
+            if (answers.isNotEmpty()) {
+                appendLine("SURVEY RESPONSES:")
+                // Find matching instrument
+                val uidParts = survey.surveyUid.split("-")
+                val instCode = if (uidParts.size >= 5) uidParts[4] else ""
+                val instrument = InstrumentBank.instruments.find { it.code == instCode || it.code.startsWith(instCode) }
+                if (instrument != null) {
+                    instrument.sections.forEach { sect ->
+                        appendLine("\n[Section ${sect.code}: ${sect.title}]")
+                        sect.questions.forEach { q ->
+                            if (q.inputType == InputType.TABLE) {
+                                // Table grid responses
+                                appendLine("- ${q.text}:")
+                                val services = getCitySpecificServices()
+                                services.forEach { service ->
+                                    val heard = if (answers["C_GRID_${service}_heard"] == "Yes" || answers["C_GRID_${service}_Heard"] == "Yes") "Yes" else "No"
+                                    val tried = if (answers["C_GRID_${service}_tried"] == "Yes" || answers["C_GRID_${service}_Tried"] == "Yes") "Yes" else "No"
+                                    val alone = if (answers["C_GRID_${service}_alone"] == "Yes" || answers["C_GRID_${service}_Used successfully alone?"] == "Yes") "Yes" else "No"
+                                    val help = if (answers["C_GRID_${service}_help"] == "Yes" || answers["C_GRID_${service}_Used with someone’s help?"] == "Yes") "Yes" else "No"
+                                    val never = if (answers["C_GRID_${service}_never"] == "Yes" || answers["C_GRID_${service}_Never used or gave up?"] == "Yes") "Yes" else "No"
+                                    appendLine("  * $service -> Heard: $heard, Tried: $tried, Alone: $alone, Help: $help, Never: $never")
+                                }
+                            } else {
+                                val ans = answers[q.id] ?: "(No Response)"
+                                appendLine("- ${q.text}")
+                                appendLine("  Answer: $ans")
+                            }
+                        }
+                    }
+                } else {
+                    // Fallback to printing key-value pairs
+                    answers.forEach { (k, v) ->
+                        appendLine("Question $k: $v")
+                    }
+                }
+            }
+            
+            if (survey.transcriptText.isNotBlank()) {
+                appendLine("\n-----------------------------------------")
+                appendLine("INTERVIEW TRANSCRIPT / NOTES:")
+                appendLine(survey.transcriptText)
+            }
+            
+            if (survey.manualSummary.isNotBlank()) {
+                appendLine("\n-----------------------------------------")
+                appendLine("ADDITIONAL OBSERVATIONS:")
+                appendLine("Summary: ${survey.manualSummary}")
+                appendLine("Urgency: ${survey.manualUrgency}")
+                appendLine("Category: ${survey.issueCategory}")
+            }
+            appendLine("=========================================")
+        }
     }
 
     override fun onCleared() {

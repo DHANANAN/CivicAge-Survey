@@ -1,5 +1,12 @@
 package com.civilagesurvey.app.ui.screens
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.BackHandler
+import kotlinx.coroutines.launch
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
@@ -44,83 +51,269 @@ fun MainSurveyApp(viewModel: SurveyViewModel) {
         currentScreen = "home"
     }
 
-    Scaffold(
-        bottomBar = {
-            if (currentScreen != "login" && currentScreen != "runner" && currentScreen != "consent") {
-                val draftCount by viewModel.draftCount.collectAsState()
-                val syncedCount by viewModel.syncedCount.collectAsState()
-                val totalCount by viewModel.allSurveys.collectAsState().let { 
-                    derivedStateOf { it.value.size }
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
+
+    val drawerItems = listOf(
+        Triple("Home", Icons.Default.Dashboard, "home"),
+        Triple("Instruments", Icons.AutoMirrored.Filled.Assignment, "instruments"),
+        Triple("Records", Icons.Default.History, "records"),
+        Triple("QA", Icons.Default.FactCheck, "qa"),
+        Triple("Export", Icons.Default.CloudUpload, "export"),
+        Triple("Settings", Icons.Default.Settings, "settings"),
+        Triple("Profile", Icons.Default.AccountCircle, "profile")
+    )
+
+    var showExitDialog by remember { mutableStateOf(false) }
+    var showDraftDialog by remember { mutableStateOf(false) }
+
+    if (showExitDialog) {
+        AlertDialog(
+            onDismissRequest = { showExitDialog = false },
+            title = { Text("Exit App") },
+            text = { Text("Do you want to exit the CivicAge Survey application?") },
+            confirmButton = {
+                Button(onClick = {
+                    showExitDialog = false
+                    (context as? android.app.Activity)?.finish()
+                }) { Text("Exit") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showExitDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    if (showDraftDialog) {
+        AlertDialog(
+            onDismissRequest = { showDraftDialog = false },
+            title = { Text("Exit Survey Session") },
+            text = { Text("Would you like to save this survey as a draft before leaving?") },
+            confirmButton = {
+                Button(onClick = {
+                    showDraftDialog = false
+                    viewModel.stopSpeaking()
+                    currentScreen = "home"
+                }) { Text("Save Draft") }
+            },
+            dismissButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = {
+                        showDraftDialog = false
+                        viewModel.stopSpeaking()
+                        viewModel.activeSurvey.value?.let { viewModel.deleteSurvey(it) }
+                        currentScreen = "home"
+                    }) { Text("Discard", color = RedError) }
+                    TextButton(onClick = { showDraftDialog = false }) { Text("Stay") }
                 }
-                val pendingSyncCount by remember {
-                    derivedStateOf { totalCount - syncedCount }
+            }
+        )
+    }
+
+    if (currentScreen != "login") {
+        BackHandler {
+            when (currentScreen) {
+                "home" -> {
+                    showExitDialog = true
                 }
-                
-                NavigationBar(containerColor = MaterialTheme.colorScheme.surface, tonalElevation = 8.dp) {
-                    val items = listOf(
-                        Triple("Home", Icons.Default.Dashboard, "home"),
-                        Triple("Instruments", Icons.AutoMirrored.Filled.Assignment, "instruments"),
-                        Triple("Records", Icons.Default.History, "records"),
-                        Triple("QA", Icons.Default.FactCheck, "qa"),
-                        Triple("Export", Icons.Default.CloudUpload, "export"),
-                        Triple("Settings", Icons.Default.Settings, "settings")
-                    )
-                    items.forEach { (label, icon, screen) ->
-                        NavigationBarItem(
-                            selected = currentScreen == screen,
-                            onClick = { currentScreen = screen },
-                            icon = {
-                                BadgedBox(badge = {
-                                    when (label) {
-                                        "Records" -> if (draftCount > 0) Badge { Text(draftCount.toString()) }
-                                        "Export" -> if (pendingSyncCount > 0) Badge { Text(pendingSyncCount.toString()) }
-                                    }
-                                }) {
-                                    Icon(icon, contentDescription = label)
-                                }
-                            },
-                            label = { Text(label, fontSize = 10.sp, fontWeight = FontWeight.Bold) }
-                        )
+                "runner" -> {
+                    val showThemes = viewModel.showThemesPhase.value
+                    val sectIndex = viewModel.currentSectionIndex.value
+                    val questIndex = viewModel.currentQuestionIndex.value
+                    val themeIndex = viewModel.currentInterviewIndex.value
+                    val inst = viewModel.currentInstrument.value
+                    
+                    val isAtStart = if (showThemes) {
+                        themeIndex == 0 && (inst?.sections?.isEmpty() ?: true)
+                    } else {
+                        sectIndex == 0 && questIndex == 0
                     }
+                    
+                    if (isAtStart) {
+                        showDraftDialog = true
+                    } else {
+                        viewModel.moveToPreviousStep()
+                    }
+                }
+                "consent" -> {
+                    showDraftDialog = true
+                }
+                "instruments" -> {
+                    currentScreen = "home"
+                }
+                else -> {
+                    currentScreen = "home"
                 }
             }
         }
-    ) { innerPadding ->
-        val isNetworkOnline by viewModel.isNetworkOnline.collectAsState()
-        
-        Box(modifier = Modifier.padding(innerPadding).fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                if (!isNetworkOnline && currentScreen != "login") {
-                    Surface(color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth()) {
-                        Text(
-                            text = "You are offline. Data will sync automatically later.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onErrorContainer,
-                            modifier = Modifier.padding(8.dp).fillMaxWidth(),
-                            textAlign = TextAlign.Center
+    }
+
+    if (currentScreen == "login") {
+        LoginScreen(viewModel) { currentScreen = "home" }
+    } else {
+        ModalNavigationDrawer(
+            drawerState = drawerState,
+            drawerContent = {
+                ModalDrawerSheet {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "CivicAge Survey",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.ExtraBold,
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "Smart Cities, Silent Citizens",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(horizontal = 24.dp),
+                        color = Color.Gray
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Divider(modifier = Modifier.padding(vertical = 8.dp))
+                    
+                    drawerItems.forEach { (label, icon, screen) ->
+                        NavigationDrawerItem(
+                            icon = { Icon(icon, contentDescription = null) },
+                            label = { Text(label, fontWeight = FontWeight.SemiBold) },
+                            selected = currentScreen == screen,
+                            onClick = {
+                                currentScreen = screen
+                                scope.launch { drawerState.close() }
+                            },
+                            modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
                         )
                     }
-                }
-                
-                Box(modifier = Modifier.weight(1f)) {
-                    AnimatedContent(
-                        targetState = currentScreen,
-                        transitionSpec = {
-                            fadeIn() togetherWith fadeOut()
+                    
+                    Spacer(modifier = Modifier.weight(1f))
+                    Divider(modifier = Modifier.padding(vertical = 8.dp))
+                    NavigationDrawerItem(
+                        icon = { Icon(Icons.Default.ExitToApp, contentDescription = null) },
+                        label = { Text("Logout", fontWeight = FontWeight.Bold, color = RedError) },
+                        selected = false,
+                        onClick = {
+                            viewModel.logout()
+                            currentScreen = "login"
+                            scope.launch { drawerState.close() }
                         },
-                        label = "ScreenTransition"
-                    ) { screen ->
-                        when {
-                            screen == "login" -> LoginScreen(viewModel) { currentScreen = "home" }
-                            screen == "home" -> HomeScreen(viewModel, onNavigate = { currentScreen = it })
-                            screen == "instruments" -> InstrumentSelectorScreen(viewModel) { currentScreen = "consent" }
-                            screen == "consent" -> ConsentFlowScreen(viewModel) { currentScreen = "runner" }
-                            screen == "runner" -> InstrumentRunnerScreen(viewModel) { currentScreen = "home" }
-                            screen == "qa" -> QAScreen(viewModel)
-                            screen == "records" -> RecordsScreen(viewModel)
-                            screen == "export" -> ExportScreen(viewModel)
-                            screen == "settings" -> SettingsScreen(viewModel)
-                            screen == "profile" -> ProfileScreen(viewModel) { currentScreen = "login" }
+                        modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+            }
+        ) {
+            Scaffold(
+                topBar = {
+                    if (currentScreen != "runner" && currentScreen != "consent") {
+                        val title = when (currentScreen) {
+                            "home" -> "DCA Dashboard"
+                            "instruments" -> "Research Instruments"
+                            "records" -> "Survey Records"
+                            "qa" -> "Quality Assurance"
+                            "export" -> "Data Export & Sync"
+                            "settings" -> "Settings"
+                            "profile" -> "Surveyor Profile"
+                            else -> "CivicAge DCA"
+                        }
+                        CenterAlignedTopAppBar(
+                            title = {
+                                Text(
+                                    text = title,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                            },
+                            navigationIcon = {
+                                IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                                    Icon(
+                                        imageVector = Icons.Default.Menu,
+                                        contentDescription = "Open navigation drawer"
+                                    )
+                                }
+                            },
+                            colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant
+                            )
+                        )
+                    }
+                },
+                bottomBar = {
+                    if (currentScreen != "runner" && currentScreen != "consent") {
+                        val draftCount by viewModel.draftCount.collectAsState()
+                        val syncedCount by viewModel.syncedCount.collectAsState()
+                        val totalCount by viewModel.allSurveys.collectAsState().let { 
+                            derivedStateOf { it.value.size }
+                        }
+                        val pendingSyncCount by remember {
+                            derivedStateOf { totalCount - syncedCount }
+                        }
+                        
+                        NavigationBar(containerColor = MaterialTheme.colorScheme.surface, tonalElevation = 8.dp) {
+                            val items = listOf(
+                                Triple("Home", Icons.Default.Dashboard, "home"),
+                                Triple("Instruments", Icons.AutoMirrored.Filled.Assignment, "instruments"),
+                                Triple("Records", Icons.Default.History, "records"),
+                                Triple("QA", Icons.Default.FactCheck, "qa"),
+                                Triple("Export", Icons.Default.CloudUpload, "export"),
+                                Triple("Settings", Icons.Default.Settings, "settings")
+                            )
+                            items.forEach { (label, icon, screen) ->
+                                NavigationBarItem(
+                                    selected = currentScreen == screen,
+                                    onClick = { currentScreen = screen },
+                                    icon = {
+                                        BadgedBox(badge = {
+                                            when (label) {
+                                                "Records" -> if (draftCount > 0) Badge { Text(draftCount.toString()) }
+                                                "Export" -> if (pendingSyncCount > 0) Badge { Text(pendingSyncCount.toString()) }
+                                            }
+                                        }) {
+                                            Icon(icon, contentDescription = label)
+                                        }
+                                    },
+                                    label = { Text(label, fontSize = 10.sp, fontWeight = FontWeight.Bold) }
+                                )
+                            }
+                        }
+                    }
+                }
+            ) { innerPadding ->
+                val isNetworkOnline by viewModel.isNetworkOnline.collectAsState()
+                
+                Box(modifier = Modifier.padding(innerPadding).fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        if (!isNetworkOnline && currentScreen != "login") {
+                            Surface(color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth()) {
+                                Text(
+                                    text = "You are offline. Data will sync automatically later.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                    modifier = Modifier.padding(8.dp).fillMaxWidth(),
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        }
+                        
+                        Box(modifier = Modifier.weight(1f)) {
+                            AnimatedContent(
+                                targetState = currentScreen,
+                                transitionSpec = {
+                                    fadeIn() togetherWith fadeOut()
+                                },
+                                label = "ScreenTransition"
+                            ) { screen ->
+                                when {
+                                    screen == "home" -> HomeScreen(viewModel, onNavigate = { currentScreen = it })
+                                    screen == "instruments" -> InstrumentSelectorScreen(viewModel) { currentScreen = "consent" }
+                                    screen == "consent" -> ConsentFlowScreen(viewModel) { currentScreen = "runner" }
+                                    screen == "runner" -> InstrumentRunnerScreen(viewModel) { currentScreen = "home" }
+                                    screen == "qa" -> QAScreen(viewModel)
+                                    screen == "records" -> RecordsScreen(viewModel)
+                                    screen == "export" -> ExportScreen(viewModel)
+                                    screen == "settings" -> SettingsScreen(viewModel)
+                                    screen == "profile" -> ProfileScreen(viewModel) { currentScreen = "login" }
+                                }
+                            }
                         }
                     }
                 }
@@ -135,19 +328,6 @@ fun LoginScreen(viewModel: SurveyViewModel, onLogin: () -> Unit) {
     var name by remember { mutableStateOf(viewModel.surveyorName.value) }
     var id by remember { mutableStateOf(viewModel.surveyorId.value) }
     var phone by remember { mutableStateOf(viewModel.surveyorPhone.value) }
-
-    var subvName by remember { mutableStateOf(viewModel.survivorName.value) }
-    var subvAge by remember { mutableStateOf(viewModel.survivorAge.value) }
-    var subvEmail by remember { mutableStateOf(viewModel.survivorEmail.value) }
-    var subvPhone by remember { mutableStateOf(viewModel.survivorPhone.value) }
-
-    var cgName by remember { mutableStateOf(viewModel.caregiverName.value) }
-    var cgAge by remember { mutableStateOf(viewModel.caregiverAge.value) }
-    var cgEmail by remember { mutableStateOf(viewModel.caregiverEmail.value) }
-    var cgPhone by remember { mutableStateOf(viewModel.caregiverPhone.value) }
-    var cgRelation by remember { mutableStateOf(viewModel.caregiverRelation.value) }
-
-    var activeTab by remember { mutableStateOf(0) }
     val context = LocalContext.current
 
     Column(modifier = Modifier.fillMaxSize().padding(24.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
@@ -155,79 +335,28 @@ fun LoginScreen(viewModel: SurveyViewModel, onLogin: () -> Unit) {
         Spacer(modifier = Modifier.height(12.dp))
         Text("DCA", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.ExtraBold)
         Text("Data Collection Application", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-        Spacer(modifier = Modifier.height(16.dp))
-
-        TabRow(selectedTabIndex = activeTab, modifier = Modifier.fillMaxWidth()) {
-            Tab(selected = activeTab == 0, onClick = { activeTab = 0 }, text = { Text("1. Surveyor", fontSize = 12.sp) })
-            Tab(selected = activeTab == 1, onClick = { activeTab = 1 }, text = { Text("2. Survivor", fontSize = 12.sp) })
-            Tab(selected = activeTab == 2, onClick = { activeTab = 2 }, text = { Text("3. Respondent", fontSize = 12.sp) })
-        }
-
         Spacer(modifier = Modifier.height(24.dp))
 
-        when (activeTab) {
-            0 -> {
-                Text("Surveyor Profile", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
-                Spacer(modifier = Modifier.height(12.dp))
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Surveyor Full Name *") }, modifier = Modifier.fillMaxWidth())
-                Spacer(modifier = Modifier.height(12.dp))
-                OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("Surveyor Email *") }, modifier = Modifier.fillMaxWidth())
-                Spacer(modifier = Modifier.height(12.dp))
-                OutlinedTextField(value = id, onValueChange = { id = it }, label = { Text("Surveyor ID *") }, modifier = Modifier.fillMaxWidth())
-                Spacer(modifier = Modifier.height(12.dp))
-                OutlinedTextField(value = phone, onValueChange = { phone = it }, label = { Text("Surveyor Phone") }, modifier = Modifier.fillMaxWidth())
-            }
-            1 -> {
-                Text("Survivor (Participant) Profile", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
-                Spacer(modifier = Modifier.height(12.dp))
-                OutlinedTextField(value = subvName, onValueChange = { subvName = it }, label = { Text("Survivor Full Name *") }, modifier = Modifier.fillMaxWidth())
-                Spacer(modifier = Modifier.height(12.dp))
-                OutlinedTextField(value = subvAge, onValueChange = { subvAge = it }, label = { Text("Survivor Age *") }, modifier = Modifier.fillMaxWidth())
-                Spacer(modifier = Modifier.height(12.dp))
-                OutlinedTextField(value = subvEmail, onValueChange = { subvEmail = it }, label = { Text("Survivor Contact Email") }, modifier = Modifier.fillMaxWidth())
-                Spacer(modifier = Modifier.height(12.dp))
-                OutlinedTextField(value = subvPhone, onValueChange = { subvPhone = it }, label = { Text("Survivor Mobile Number") }, modifier = Modifier.fillMaxWidth())
-            }
-            2 -> {
-                Text("Caregiver / Respondent Profile", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
-                Spacer(modifier = Modifier.height(12.dp))
-                OutlinedTextField(value = cgName, onValueChange = { cgName = it }, label = { Text("Respondent Full Name *") }, modifier = Modifier.fillMaxWidth())
-                Spacer(modifier = Modifier.height(12.dp))
-                OutlinedTextField(value = cgAge, onValueChange = { cgAge = it }, label = { Text("Respondent Age *") }, modifier = Modifier.fillMaxWidth())
-                Spacer(modifier = Modifier.height(12.dp))
-                OutlinedTextField(value = cgEmail, onValueChange = { cgEmail = it }, label = { Text("Respondent Contact Email") }, modifier = Modifier.fillMaxWidth())
-                Spacer(modifier = Modifier.height(12.dp))
-                OutlinedTextField(value = cgPhone, onValueChange = { cgPhone = it }, label = { Text("Respondent Mobile Number") }, modifier = Modifier.fillMaxWidth())
-                Spacer(modifier = Modifier.height(12.dp))
-                OutlinedTextField(value = cgRelation, onValueChange = { cgRelation = it }, label = { Text("Relation to Survivor (e.g. Spouse/Child/Paid Caregiver) *") }, modifier = Modifier.fillMaxWidth())
-            }
-        }
+        Text("Surveyor Profile Login", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
+        Spacer(modifier = Modifier.height(12.dp))
+        
+        OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Surveyor Full Name *") }, modifier = Modifier.fillMaxWidth())
+        Spacer(modifier = Modifier.height(12.dp))
+        OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("Surveyor Email *") }, modifier = Modifier.fillMaxWidth())
+        Spacer(modifier = Modifier.height(12.dp))
+        OutlinedTextField(value = id, onValueChange = { id = it }, label = { Text("Surveyor ID / FI Code *") }, modifier = Modifier.fillMaxWidth())
+        Spacer(modifier = Modifier.height(12.dp))
+        OutlinedTextField(value = phone, onValueChange = { phone = it }, label = { Text("Surveyor Phone") }, modifier = Modifier.fillMaxWidth())
         
         Spacer(modifier = Modifier.height(32.dp))
         Button(onClick = {
-            if (activeTab < 2) {
-                activeTab++
+            if (name.isNotBlank() && email.contains("@") && id.isNotBlank()) {
+                viewModel.signInOrSignUp(email, "", name, id, phone, false) { _, _ -> onLogin() }
             } else {
-                if (name.isNotBlank() && email.contains("@") && id.isNotBlank() &&
-                    subvName.isNotBlank() && subvAge.isNotBlank() &&
-                    cgName.isNotBlank() && cgAge.isNotBlank() && cgRelation.isNotBlank()) {
-                    
-                    viewModel.saveSurvivorProfile(subvName, subvAge, subvEmail, subvPhone)
-                    viewModel.saveCaregiverProfile(cgName, cgAge, cgEmail, cgPhone, cgRelation)
-                    
-                    viewModel.signInOrSignUp(email, "", name, id, phone, false) { _, _ -> onLogin() }
-                } else {
-                    Toast.makeText(context, "Please fill all required (*) fields", Toast.LENGTH_LONG).show()
-                }
+                Toast.makeText(context, "Please fill all required (*) fields and provide a valid email", Toast.LENGTH_LONG).show()
             }
         }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
-            Text(if (activeTab < 2) "Next Profile" else "Access Dashboard", fontWeight = FontWeight.Bold)
-        }
-        if (activeTab > 0) {
-            Spacer(modifier = Modifier.height(12.dp))
-            OutlinedButton(onClick = { activeTab-- }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
-                Text("Previous Profile", fontWeight = FontWeight.Bold)
-            }
+            Text("Access Dashboard", fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -302,11 +431,174 @@ fun QuickActionCard(title: String, icon: androidx.compose.ui.graphics.vector.Ima
 @Composable
 fun InstrumentSelectorScreen(viewModel: SurveyViewModel, onNavigate: () -> Unit) {
     val instruments = InstrumentBank.instruments
-    var selectedCity by remember { mutableStateOf("ND") }
+    val context = LocalContext.current
+    var selectedCity by remember { mutableStateOf(viewModel.selectedCity.value) }
+
+    var showIntakeDialog by remember { mutableStateOf(false) }
+    var targetInstrument by remember { mutableStateOf<Instrument?>(null) }
+
+    var respondentName by remember { mutableStateOf("") }
+    var respondentAge by remember { mutableStateOf("") }
+    var respondentMobile by remember { mutableStateOf("") }
+    var respondentCity by remember { mutableStateOf(selectedCity) }
+
+    if (showIntakeDialog && targetInstrument != null) {
+        val intakeLatitude by viewModel.intakeLatitude.collectAsState()
+        val intakeLongitude by viewModel.intakeLongitude.collectAsState()
+        val intakeAccuracy by viewModel.intakeAccuracy.collectAsState()
+        val intakeLocationStatus by viewModel.intakeLocationStatus.collectAsState()
+        val isFetchingGps by viewModel.isFetchingGps.collectAsState()
+
+        val hasFineLocation = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        val hasCoarseLocation = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        
+        val permissionLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.RequestMultiplePermissions()
+        ) { permissions ->
+            val fineGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
+            val coarseGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
+            if (fineGranted || coarseGranted) {
+                viewModel.fetchIntakeLocation()
+            } else {
+                Toast.makeText(context, "Location permission denied", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        AlertDialog(
+            onDismissRequest = { showIntakeDialog = false },
+            title = { Text("Respondent Intake Profile", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "Instrument: ${targetInstrument!!.title} (${targetInstrument!!.code})",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    
+                    OutlinedTextField(
+                        value = respondentName,
+                        onValueChange = { respondentName = it },
+                        label = { Text("Respondent Name *") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    
+                    OutlinedTextField(
+                        value = respondentAge,
+                        onValueChange = { respondentAge = it },
+                        label = { Text("Respondent Age *") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    
+                    OutlinedTextField(
+                        value = respondentMobile,
+                        onValueChange = { respondentMobile = it },
+                        label = { Text("Mobile Number *") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    
+                    Text("City", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                    Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                        val citiesList = listOf("ND" to "New Delhi", "SG" to "Srinagar", "AZ" to "Aizawl", "CH" to "Chennai", "GN" to "Gandhinagar", "IN" to "Indore")
+                        citiesList.forEach { (code, name) ->
+                            FilterChip(
+                                selected = respondentCity == code,
+                                onClick = { respondentCity = code },
+                                label = { Text(name) },
+                                modifier = Modifier.padding(end = 8.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("GPS Coordinates Verification", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                    
+                    if (intakeLatitude != 0.0 || intakeLongitude != 0.0) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f))
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text("Latitude: $intakeLatitude", style = MaterialTheme.typography.bodyMedium)
+                                Text("Longitude: $intakeLongitude", style = MaterialTheme.typography.bodyMedium)
+                                Text("Accuracy: ${String.format("%.1f", intakeAccuracy)} meters", style = MaterialTheme.typography.bodyMedium)
+                                Text("Status: $intakeLocationStatus", style = MaterialTheme.typography.bodyMedium, color = GreenSuccess)
+                            }
+                        }
+                    } else {
+                        Text(
+                            text = "Status: $intakeLocationStatus",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (intakeLocationStatus.contains("Fetching")) MaterialTheme.colorScheme.primary else RedError
+                        )
+                    }
+
+                    Button(
+                        onClick = {
+                            if (hasFineLocation || hasCoarseLocation) {
+                                viewModel.fetchIntakeLocation()
+                            } else {
+                                permissionLauncher.launch(
+                                    arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+                                )
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                    ) {
+                        if (isFetchingGps) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), color = MaterialTheme.colorScheme.onSecondary)
+                        } else {
+                            Text("Locate Location")
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val ageInt = respondentAge.toIntOrNull()
+                        val isMobileValid = respondentMobile.isNotBlank() && respondentMobile.matches(Regex("^[0-9+() -]+$"))
+                        
+                        if (respondentName.isBlank() || respondentAge.isBlank() || respondentMobile.isBlank()) {
+                            Toast.makeText(context, "Please fill all fields", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+                        if (!isMobileValid) {
+                            Toast.makeText(context, "Please enter a valid mobile number", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+                        
+                        if (targetInstrument!!.code.contains("OOP") && (ageInt == null || ageInt < 75)) {
+                            Toast.makeText(context, "Warning: Participant age is below 75 years (Target Population)", Toast.LENGTH_LONG).show()
+                        }
+                        
+                        viewModel.selectedCity.value = respondentCity
+                        viewModel.startDcaSession(
+                            instrument = targetInstrument!!,
+                            rName = respondentName,
+                            rAge = respondentAge,
+                            rMobile = respondentMobile,
+                            rCity = respondentCity
+                        )
+                        showIntakeDialog = false
+                        onNavigate()
+                    }
+                ) { Text("Start Survey") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showIntakeDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Text("Select City", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        CitySelector(selectedCity) { selectedCity = it; viewModel.selectedCity.value = it }
+        CitySelector(selectedCity) { selectedCity = it; viewModel.selectedCity.value = it; respondentCity = it }
         
         Spacer(modifier = Modifier.height(24.dp))
         Text("Research Instruments", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
@@ -315,8 +607,15 @@ fun InstrumentSelectorScreen(viewModel: SurveyViewModel, onNavigate: () -> Unit)
         LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             items(instruments) { instrument ->
                 InstrumentCard(instrument) {
-                    viewModel.startDcaSession(instrument)
-                    onNavigate()
+                    targetInstrument = instrument
+                    respondentName = ""
+                    respondentAge = ""
+                    respondentMobile = ""
+                    viewModel.intakeLatitude.value = 0.0
+                    viewModel.intakeLongitude.value = 0.0
+                    viewModel.intakeAccuracy.value = 0f
+                    viewModel.intakeLocationStatus.value = "Not Captured"
+                    showIntakeDialog = true
                 }
             }
         }
@@ -389,8 +688,6 @@ fun RecordsScreen(viewModel: SurveyViewModel) {
     val filteredSurveys = surveys.filter { it.participantName.contains(searchQuery, ignoreCase = true) }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Text("Survey Records", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(16.dp))
         OutlinedTextField(value = searchQuery, onValueChange = { searchQuery = it }, modifier = Modifier.fillMaxWidth(), placeholder = { Text("Search records...") }, leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) })
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -398,22 +695,37 @@ fun RecordsScreen(viewModel: SurveyViewModel) {
             EmptyStateCard("No records found.")
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                items(filteredSurveys) { s -> SurveyRecordCard(s, onDelete = { viewModel.deleteSurvey(s) }) }
+                items(filteredSurveys) { s -> 
+                    val context = LocalContext.current
+                    SurveyRecordCard(
+                        s = s,
+                        onDelete = { viewModel.deleteSurvey(s) },
+                        onEmail = {
+                            val subject = "CivicAge Survey Response – ${s.participantName} – ${s.surveyUid.split("-").getOrNull(4) ?: ""}"
+                            val body = viewModel.buildDetailedReportText(s)
+                            shareSurveyReportViaEmail(context, body, subject)
+                        }
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-fun SurveyRecordCard(s: SurveyEntity, onDelete: () -> Unit) {
+fun SurveyRecordCard(s: SurveyEntity, onDelete: () -> Unit, onEmail: () -> Unit) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(s.participantName.ifBlank { "Unnamed Respondent" }, fontWeight = FontWeight.Bold)
             Text(s.surveyUid, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
             Spacer(modifier = Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+            Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(s.status, color = if (s.status == "COMPLETED") GreenSuccess else OrangeWarning, fontWeight = FontWeight.Bold)
-                IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, contentDescription = null, tint = RedError) }
+                Row {
+                    IconButton(onClick = onEmail) { Icon(Icons.Default.Email, contentDescription = "Email Report", tint = MaterialTheme.colorScheme.primary) }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, contentDescription = null, tint = RedError) }
+                }
             }
         }
     }
@@ -427,9 +739,6 @@ fun ExportScreen(viewModel: SurveyViewModel) {
     val pendingSyncCount = surveys.size - syncedCount
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Text("Data Export & Sync", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(16.dp))
-        
         Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text("Sync Status", fontWeight = FontWeight.Bold)
@@ -440,9 +749,47 @@ fun ExportScreen(viewModel: SurveyViewModel) {
         }
         
         Spacer(modifier = Modifier.height(24.dp))
-        Button(onClick = { /* Export JSON */ }, modifier = Modifier.fillMaxWidth()) { Text("Export All to JSON") }
+        Button(
+            onClick = {
+                if (surveys.isEmpty()) {
+                    Toast.makeText(context, "No records to export.", Toast.LENGTH_SHORT).show()
+                } else {
+                    val jsonList = surveys.map { viewModel.exportSurveyToJson(it) }
+                    val combinedJson = "[\n" + jsonList.joinToString(",\n") + "\n]"
+                    val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    val clip = android.content.ClipData.newPlainText("CivicAge Survey JSON Export", combinedJson)
+                    clipboard.setPrimaryClip(clip)
+                    Toast.makeText(context, "Copied combined JSON to clipboard!", Toast.LENGTH_LONG).show()
+                }
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Export All to JSON (Copy to Clipboard)")
+        }
         Spacer(modifier = Modifier.height(12.dp))
-        Button(onClick = { /* Email Export */ }, modifier = Modifier.fillMaxWidth()) { Text("Email Records to Admin") }
+        Button(
+            onClick = {
+                if (surveys.isEmpty()) {
+                    Toast.makeText(context, "No survey records available to email.", Toast.LENGTH_SHORT).show()
+                } else {
+                    val subject = "CivicAge Combined Survey Records"
+                    val reportBuilder = StringBuilder()
+                    reportBuilder.appendLine("CIVICAGE SURVEY COMBINED REPORT")
+                    reportBuilder.appendLine("Total Records: ${surveys.size}")
+                    reportBuilder.appendLine("Generated At: ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())}")
+                    reportBuilder.appendLine("=========================================\n")
+                    surveys.forEachIndexed { idx, s ->
+                        reportBuilder.appendLine("RECORD #${idx + 1}")
+                        reportBuilder.appendLine(viewModel.buildDetailedReportText(s))
+                        reportBuilder.appendLine("\n-----------------------------------------\n")
+                    }
+                    shareSurveyReportViaEmail(context, reportBuilder.toString(), subject)
+                }
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Email Records to Admin")
+        }
     }
 }
 
@@ -487,6 +834,32 @@ fun EmptyStateCard(message: String) {
             Icon(Icons.Default.Inbox, contentDescription = null, modifier = Modifier.size(48.dp), tint = Color.LightGray)
             Spacer(modifier = Modifier.height(16.dp))
             Text(message, textAlign = TextAlign.Center, color = Color.Gray)
+        }
+    }
+}
+
+fun shareSurveyReportViaEmail(context: android.content.Context, reportText: String, subject: String) {
+    val intent = Intent(Intent.ACTION_SENDTO).apply {
+        data = Uri.parse("mailto:")
+        putExtra(Intent.EXTRA_EMAIL, arrayOf("mdc18042007@gmail.com"))
+        putExtra(Intent.EXTRA_SUBJECT, subject)
+        putExtra(Intent.EXTRA_TEXT, reportText)
+    }
+    
+    val gmailIntent = Intent(Intent.ACTION_SENDTO).apply {
+        data = Uri.parse("mailto:mdc18042007@gmail.com")
+        putExtra(Intent.EXTRA_SUBJECT, subject)
+        putExtra(Intent.EXTRA_TEXT, reportText)
+        setPackage("com.google.android.gm")
+    }
+
+    try {
+        context.startActivity(gmailIntent)
+    } catch (e: Exception) {
+        try {
+            context.startActivity(Intent.createChooser(intent, "Send Email via..."))
+        } catch (ex: Exception) {
+            Toast.makeText(context, "No email client found.", Toast.LENGTH_SHORT).show()
         }
     }
 }
