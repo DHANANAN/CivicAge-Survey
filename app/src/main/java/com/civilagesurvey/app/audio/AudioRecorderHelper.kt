@@ -11,44 +11,62 @@ class AudioRecorderHelper(private val context: Context) {
     var isPaused = false
 
     fun startRecording(fileName: String): File? {
-        val file = File(context.getExternalFilesDir(null), "$fileName.m4a")
-        mediaRecorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            MediaRecorder(context)
-        } else {
-            MediaRecorder()
-        }.apply {
-            setAudioSource(MediaRecorder.AudioSource.MIC)
-            setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-            setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-            setOutputFile(file.absolutePath)
-            prepare()
-            start()
+        return try {
+            val file = File(context.getExternalFilesDir(null), "$fileName.m4a")
+            mediaRecorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                MediaRecorder(context)
+            } else {
+                MediaRecorder()
+            }.apply {
+                setAudioSource(MediaRecorder.AudioSource.MIC)
+                setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+                setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+                setOutputFile(file.absolutePath)
+                prepare()
+                start()
+            }
+            isRecording = true
+            file
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
         }
-        isRecording = true
-        return file
     }
 
     fun stopRecording(): File? {
-        mediaRecorder?.apply {
-            stop()
-            release()
+        try {
+            mediaRecorder?.apply {
+                stop()
+                release()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        } finally {
+            mediaRecorder = null
+            isRecording = false
         }
-        mediaRecorder = null
-        isRecording = false
-        return null // Simplified for now
+        return null
     }
 
     fun pauseRecording() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            mediaRecorder?.pause()
-            isPaused = true
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                mediaRecorder?.pause()
+                isPaused = true
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 
     fun resumeRecording() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            mediaRecorder?.resume()
-            isPaused = false
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                mediaRecorder?.resume()
+                isPaused = false
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 }

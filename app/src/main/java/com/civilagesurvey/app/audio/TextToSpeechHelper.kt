@@ -10,7 +10,27 @@ class TextToSpeechHelper(context: Context) : TextToSpeech.OnInitListener {
 
     override fun onInit(status: Int) {
         if (status == TextToSpeech.SUCCESS) {
-            tts.language = Locale.ENGLISH
+            val localeIn = Locale("en", "IN")
+            val result = tts.setLanguage(localeIn)
+            if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                tts.language = Locale.ENGLISH
+            }
+            tts.setSpeechRate(0.8f) // Clearer, slower pace (80% rate)
+            try {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                    val voices = tts.voices
+                    if (voices != null) {
+                        for (voice in voices) {
+                            if (voice.locale.country.equals("IN", ignoreCase = true)) {
+                                tts.voice = voice
+                                break
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
             isReady = true
         }
     }

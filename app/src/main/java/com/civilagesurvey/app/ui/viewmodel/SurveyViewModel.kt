@@ -93,16 +93,16 @@ class SurveyViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // Dashboard Stats
-    val completedCount = allSurveys.map { it.count { s -> s.status == "COMPLETED" } }
+    val completedCount = filteredSurveys.map { it.count { s -> s.status == "COMPLETED" } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
     
-    val draftCount = allSurveys.map { it.count { s -> s.status == "DRAFT" } }
+    val draftCount = filteredSurveys.map { it.count { s -> s.status == "DRAFT" } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
     
-    val syncedCount = allSurveys.map { it.count { s -> s.isSynced } }
+    val syncedCount = filteredSurveys.map { it.count { s -> s.isSynced } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
     
-    val offlineCount = allSurveys.map { it.count { s -> !s.isSynced } }
+    val offlineCount = filteredSurveys.map { it.count { s -> !s.isSynced } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
     // Active Survey Drafting State
@@ -865,10 +865,22 @@ class SurveyViewModel(
     private var speechRecognizer: SpeechRecognizer? = null
 
     fun startVoiceAnswer() {
-        if (audioRecorder.startRecording("CAS_AUDIO_${activeSurveyUid.value}") != null) {
+        val fileName = "CAS_AUDIO_${activeSurveyUid.value}"
+        val audioFile = audioRecorder.startRecording(fileName)
+        if (audioFile != null) {
             recordingState.value = "Listening"
             isRecording.value = true
             startTimer()
+            
+            viewModelScope.launch(Dispatchers.IO) {
+                activeSurvey.value?.let { currentSurvey ->
+                    val updated = currentSurvey.copy(
+                        interviewAudioLocalPath = audioFile.absolutePath
+                    )
+                    repository.insertSurvey(updated)
+                    activeSurvey.value = updated
+                }
+            }
             
             viewModelScope.launch(Dispatchers.Main) {
                 try {
@@ -889,6 +901,17 @@ class SurveyViewModel(
                                     if (transcribedText.isNotBlank()) {
                                         lastTranscribedText = transcribedText
                                         recordingState.value = "Transcript Ready"
+                                        
+                                        // Auto-save speech-to-text transcript as it's completed
+                                        viewModelScope.launch(Dispatchers.IO) {
+                                            activeSurvey.value?.let { currentSurvey ->
+                                                val updated = currentSurvey.copy(
+                                                    transcriptText = transcribedText
+                                                )
+                                                repository.insertSurvey(updated)
+                                                activeSurvey.value = updated
+                                            }
+                                        }
                                     }
                                 }
                                 override fun onPartialResults(partialResults: Bundle?) {
@@ -914,6 +937,8 @@ class SurveyViewModel(
                     recordingState.value = "Speech error: ${e.localizedMessage}"
                 }
             }
+        } else {
+            recordingState.value = "Recorder Init Failed"
         }
     }
 

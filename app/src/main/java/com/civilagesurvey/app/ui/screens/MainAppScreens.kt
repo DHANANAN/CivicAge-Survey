@@ -42,6 +42,12 @@ import com.civilagesurvey.app.ui.theme.RedError
 import com.civilagesurvey.app.ui.viewmodel.SurveyViewModel
 import java.text.SimpleDateFormat
 import java.util.*
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -345,20 +351,41 @@ fun LoginScreen(viewModel: SurveyViewModel, onLogin: () -> Unit) {
     var phone by remember { mutableStateOf(viewModel.surveyorPhone.value) }
     val context = LocalContext.current
 
-    Column(modifier = Modifier.fillMaxSize().padding(24.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-        Icon(Icons.Default.LocationCity, contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.primary)
+    val brightText = Color(0xFF111827) // Near-black for high glare readability
+    val inputColors = OutlinedTextFieldDefaults.colors(
+        focusedTextColor = Color.Black,
+        unfocusedTextColor = Color.Black,
+        focusedLabelColor = Color(0xFF1E3A8A),
+        unfocusedLabelColor = Color(0xFF374151),
+        focusedBorderColor = Color(0xFF1E3A8A),
+        unfocusedBorderColor = Color(0xFF4B5563),
+        focusedContainerColor = Color.White,
+        unfocusedContainerColor = Color.White
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.White)
+            .padding(24.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(Icons.Default.LocationCity, contentDescription = null, modifier = Modifier.size(64.dp), tint = Color(0xFF1E3A8A))
         Spacer(modifier = Modifier.height(12.dp))
-        Text("DCA", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.ExtraBold)
-        Text("Data Collection Application", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+        Text("DCA", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.ExtraBold, color = Color.Black)
+        Text("Data Collection Application", style = MaterialTheme.typography.titleMedium, color = Color(0xFF1E3A8A))
         Spacer(modifier = Modifier.height(24.dp))
 
-        Text("Surveyor Profile Login", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
+        Text("Surveyor Profile Login", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = brightText)
         Spacer(modifier = Modifier.height(12.dp))
         
         OutlinedTextField(
             value = email, 
             onValueChange = { email = it }, 
             label = { Text("Email / Username *") }, 
+            colors = inputColors,
             modifier = Modifier.fillMaxWidth()
         )
         Spacer(modifier = Modifier.height(12.dp))
@@ -368,17 +395,18 @@ fun LoginScreen(viewModel: SurveyViewModel, onLogin: () -> Unit) {
             label = { Text("Password *") }, 
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            colors = inputColors,
             modifier = Modifier.fillMaxWidth()
         )
         Spacer(modifier = Modifier.height(24.dp))
 
-        Text("Optional Surveyor Profile Info", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+        Text("Optional Surveyor Profile Info", style = MaterialTheme.typography.bodyMedium, color = Color(0xFF374151))
         Spacer(modifier = Modifier.height(8.dp))
-        OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Surveyor Full Name") }, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Surveyor Full Name") }, colors = inputColors, modifier = Modifier.fillMaxWidth())
         Spacer(modifier = Modifier.height(12.dp))
-        OutlinedTextField(value = id, onValueChange = { id = it }, label = { Text("Surveyor ID / FI Code") }, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(value = id, onValueChange = { id = it }, label = { Text("Surveyor ID / FI Code") }, colors = inputColors, modifier = Modifier.fillMaxWidth())
         Spacer(modifier = Modifier.height(12.dp))
-        OutlinedTextField(value = phone, onValueChange = { phone = it }, label = { Text("Surveyor Phone") }, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(value = phone, onValueChange = { phone = it }, label = { Text("Surveyor Phone") }, colors = inputColors, modifier = Modifier.fillMaxWidth())
         
         Spacer(modifier = Modifier.height(32.dp))
         Button(onClick = {
@@ -410,7 +438,7 @@ fun LoginScreen(viewModel: SurveyViewModel, onLogin: () -> Unit) {
 
 @Composable
 fun HomeScreen(viewModel: SurveyViewModel, onNavigate: (String) -> Unit) {
-    val allSurveys by viewModel.allSurveys.collectAsState()
+    val allSurveys by viewModel.filteredSurveys.collectAsState()
     val completedCount by viewModel.completedCount.collectAsState()
     val draftCount by viewModel.draftCount.collectAsState()
     val syncedCount by viewModel.syncedCount.collectAsState()
@@ -527,6 +555,7 @@ fun HomeScreen(viewModel: SurveyViewModel, onNavigate: (String) -> Unit) {
         } else {
             Spacer(modifier = Modifier.height(24.dp))
             var masterIpInput by remember { mutableStateOf("") }
+            var masterEmailInput by remember { mutableStateOf("scscdata@gmail.com") }
             val clientStatus by viewModel.clientSyncStatus.collectAsState()
             
             Card(
@@ -540,9 +569,8 @@ fun HomeScreen(viewModel: SurveyViewModel, onNavigate: (String) -> Unit) {
                         Text("Sync Database to Master", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
                     }
                     Spacer(modifier = Modifier.height(12.dp))
-                    Text("Connect to Master device on the same local Wi-Fi network to submit completed surveys.", fontSize = 14.sp, color = Color.Gray)
-                    Spacer(modifier = Modifier.height(12.dp))
-                    
+                    Text("Option A: Sync via Local Wi-Fi IP", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                    Spacer(modifier = Modifier.height(4.dp))
                     OutlinedTextField(
                         value = masterIpInput,
                         onValueChange = { masterIpInput = it },
@@ -550,13 +578,7 @@ fun HomeScreen(viewModel: SurveyViewModel, onNavigate: (String) -> Unit) {
                         placeholder = { Text("e.g. 192.168.1.100") },
                         modifier = Modifier.fillMaxWidth()
                     )
-                    
-                    if (clientStatus.isNotBlank()) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(clientStatus, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-                    }
-                    
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                     Button(
                         onClick = {
                             if (masterIpInput.isNotBlank()) {
@@ -569,7 +591,60 @@ fun HomeScreen(viewModel: SurveyViewModel, onNavigate: (String) -> Unit) {
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Transmit Records to Master")
+                        Text("Transmit Records (Local Wi-Fi)")
+                    }
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    Text("Option B: Sync via Master Email", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = masterEmailInput,
+                        onValueChange = { masterEmailInput = it },
+                        label = { Text("Master Gmail Address") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = {
+                            if (allSurveys.isEmpty()) {
+                                Toast.makeText(context, "No local survey records to sync.", Toast.LENGTH_SHORT).show()
+                            } else if (masterEmailInput.isBlank() || !masterEmailInput.contains("@")) {
+                                Toast.makeText(context, "Please enter a valid Master Gmail address", Toast.LENGTH_SHORT).show()
+                            } else {
+                                val subject = "SCSC Survey Data Sync - Surveyor ${viewModel.surveyorName.value}"
+                                val reportBuilder = java.lang.StringBuilder()
+                                reportBuilder.appendLine("CIVICAGE SURVEY DATA SYNC - SCSC")
+                                reportBuilder.appendLine("Surveyor: ${viewModel.surveyorName.value} (ID: ${viewModel.surveyorId.value})")
+                                reportBuilder.appendLine("Total Records: ${allSurveys.size}")
+                                reportBuilder.appendLine("Generated At: ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())}")
+                                reportBuilder.appendLine("=========================================\n")
+                                allSurveys.forEachIndexed { idx, s ->
+                                    val ordinal = when {
+                                        (idx + 1) % 100 in 11..13 -> "${idx + 1}th"
+                                        (idx + 1) % 10 == 1 -> "${idx + 1}st"
+                                        (idx + 1) % 10 == 2 -> "${idx + 1}nd"
+                                        (idx + 1) % 10 == 3 -> "${idx + 1}rd"
+                                        else -> "${idx + 1}th"
+                                    }
+                                    reportBuilder.appendLine("$ordinal Survey Record:")
+                                    reportBuilder.appendLine(viewModel.buildDetailedReportText(s))
+                                    reportBuilder.appendLine("\n-----------------------------------------\n")
+                                }
+                                shareSurveyReportViaMasterEmail(context, reportBuilder.toString(), subject, masterEmailInput.trim())
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                    ) {
+                        Text("Transmit Records (Email)")
+                    }
+                    
+                    if (clientStatus.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(clientStatus, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                     }
                 }
             }
@@ -687,19 +762,7 @@ fun InstrumentSelectorScreen(viewModel: SurveyViewModel, onNavigate: () -> Unit)
                         modifier = Modifier.fillMaxWidth()
                     )
                     
-                    Text("City", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
-                    Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                        val citiesList = listOf("ND" to "New Delhi", "SG" to "Srinagar", "AZ" to "Aizawl", "CH" to "Chennai", "GN" to "Gandhinagar", "IN" to "Indore")
-                        citiesList.forEach { (code, name) ->
-                            FilterChip(
-                                selected = respondentCity == code,
-                                onClick = { respondentCity = code },
-                                label = { Text(name) },
-                                modifier = Modifier.padding(end = 8.dp)
-                            )
-                        }
-                    }
-
+                    // City defaults to "ND" silently
                     Spacer(modifier = Modifier.height(8.dp))
                     Text("GPS Coordinates Verification", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
                     
@@ -783,10 +846,6 @@ fun InstrumentSelectorScreen(viewModel: SurveyViewModel, onNavigate: () -> Unit)
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Text("Select City", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        CitySelector(selectedCity) { selectedCity = it; viewModel.selectedCity.value = it; respondentCity = it }
-        
-        Spacer(modifier = Modifier.height(24.dp))
         Text("Research Instruments", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         Spacer(modifier = Modifier.height(12.dp))
 
@@ -820,7 +879,31 @@ fun CitySelector(selected: String, onSelect: (String) -> Unit) {
 
 @Composable
 fun InstrumentCard(instrument: Instrument, onClick: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth().clickable { onClick() }) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.95f else 1.0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "InstrumentCardScale"
+    )
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clickable(
+                interactionSource = interactionSource,
+                indication = LocalIndication.current,
+                onClick = onClick
+            )
+    ) {
         Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(instrument.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -1004,10 +1087,14 @@ fun SettingsScreen(viewModel: SurveyViewModel) {
         Text("Settings", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         Spacer(modifier = Modifier.height(24.dp))
         Text("Theme Appearance")
-        Row {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf("Light", "Dark", "B&W").forEach { mode ->
-                FilterChip(selected = appearance.contains(mode), onClick = { viewModel.setAppearanceMode(mode) }, label = { Text(mode) })
-                Spacer(modifier = Modifier.width(8.dp))
+                FilterChip(
+                    selected = appearance.contains(mode),
+                    onClick = { viewModel.setAppearanceMode(mode) },
+                    label = { Text(mode, modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)) },
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
     }
@@ -1051,6 +1138,32 @@ fun shareSurveyReportViaEmail(context: android.content.Context, reportText: Stri
     
     val gmailIntent = Intent(Intent.ACTION_SENDTO).apply {
         data = Uri.parse("mailto:mdc18042007@gmail.com")
+        putExtra(Intent.EXTRA_SUBJECT, subject)
+        putExtra(Intent.EXTRA_TEXT, reportText)
+        setPackage("com.google.android.gm")
+    }
+
+    try {
+        context.startActivity(gmailIntent)
+    } catch (e: Exception) {
+        try {
+            context.startActivity(Intent.createChooser(intent, "Send Email via..."))
+        } catch (ex: Exception) {
+            Toast.makeText(context, "No email client found.", Toast.LENGTH_SHORT).show()
+        }
+    }
+}
+
+fun shareSurveyReportViaMasterEmail(context: android.content.Context, reportText: String, subject: String, targetEmail: String) {
+    val intent = Intent(Intent.ACTION_SENDTO).apply {
+        data = Uri.parse("mailto:")
+        putExtra(Intent.EXTRA_EMAIL, arrayOf(targetEmail))
+        putExtra(Intent.EXTRA_SUBJECT, subject)
+        putExtra(Intent.EXTRA_TEXT, reportText)
+    }
+    
+    val gmailIntent = Intent(Intent.ACTION_SENDTO).apply {
+        data = Uri.parse("mailto:$targetEmail")
         putExtra(Intent.EXTRA_SUBJECT, subject)
         putExtra(Intent.EXTRA_TEXT, reportText)
         setPackage("com.google.android.gm")
