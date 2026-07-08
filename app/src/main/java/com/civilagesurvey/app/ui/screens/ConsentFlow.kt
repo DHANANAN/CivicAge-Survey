@@ -67,8 +67,7 @@ fun ConsentFlowScreen(viewModel: SurveyViewModel, onConsentComplete: () -> Unit)
                 withdrawalExplained = withdrawalExplained,
                 onWithdrawalChange = { withdrawalExplained = it },
                 viewModel = viewModel
-            ) { step = 4 }
-            4 -> SignatureStep {
+            ) {
                 viewModel.saveConsentOptions(
                     consentGiven = mainConsent,
                     audioConsent = audioConsent,
@@ -210,7 +209,7 @@ fun ConsentCheckboxesStep(
         modifier = Modifier.fillMaxWidth().height(56.dp),
         enabled = mainConsent && withdrawalExplained
     ) {
-        Text("Proceed to Signature")
+        Text("Confirm & Start Survey")
     }
 }
 
@@ -225,100 +224,6 @@ fun ConsentRow(text: String, checked: Boolean, onCheckedChange: (Boolean) -> Uni
         Checkbox(checked = checked, onCheckedChange = onCheckedChange)
         Spacer(modifier = Modifier.width(8.dp))
         Text(text, fontSize = 16.sp)
-    }
-}
-
-@Composable
-fun SignatureStep(onComplete: () -> Unit) {
-    Text(
-        text = "Participant Signature / Thumb Impression",
-        style = MaterialTheme.typography.headlineSmall,
-        fontWeight = FontWeight.Bold
-    )
-    Spacer(modifier = Modifier.height(16.dp))
-
-    val lines = remember { mutableStateListOf<List<Offset>>() }
-    val currentLine = remember { mutableStateOf<List<Offset>>(emptyList()) }
-    
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(250.dp)
-            .border(2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f))
-    ) {
-        Canvas(
-            modifier = Modifier
-                .fillMaxSize()
-                .pointerInput(Unit) {
-                    detectDragGestures(
-                        onDragStart = { offset ->
-                            currentLine.value = listOf(offset)
-                            lines.add(currentLine.value)
-                        },
-                        onDrag = { change, _ ->
-                            change.consume()
-                            val newLine = currentLine.value + change.position
-                            currentLine.value = newLine
-                            if (lines.isNotEmpty()) {
-                                lines[lines.lastIndex] = newLine
-                            }
-                        }
-                    )
-                }
-        ) {
-            lines.forEach { line ->
-                if (line.size > 1) {
-                    for (i in 0 until line.size - 1) {
-                        drawLine(
-                            color = Color.Black,
-                            start = line[i],
-                            end = line[i + 1],
-                            strokeWidth = 4.dp.toPx(),
-                            cap = StrokeCap.Round
-                        )
-                    }
-                } else if (line.isNotEmpty()) {
-                    drawCircle(
-                        color = Color.Black,
-                        radius = 2.dp.toPx(),
-                        center = line[0]
-                    )
-                }
-            }
-        }
-
-        if (lines.isEmpty()) {
-            Text(
-                text = "Sign or place thumb impression here",
-                color = Color.Gray.copy(alpha = 0.7f),
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.align(Alignment.Center)
-            )
-        }
-
-        IconButton(
-            onClick = {
-                lines.clear()
-                currentLine.value = emptyList()
-            },
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(8.dp)
-        ) {
-            Icon(Icons.Default.Clear, contentDescription = "Clear Signature", tint = MaterialTheme.colorScheme.error)
-        }
-    }
-    
-    Spacer(modifier = Modifier.height(24.dp))
-    Button(
-        onClick = onComplete,
-        modifier = Modifier.fillMaxWidth().height(56.dp),
-        enabled = lines.isNotEmpty()
-    ) {
-        Icon(Icons.Default.Check, contentDescription = null)
-        Spacer(modifier = Modifier.width(8.dp))
-        Text("Lock Consent & Start")
     }
 }
 

@@ -1,6 +1,9 @@
 package com.civilagesurvey.app.ui.screens
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -387,16 +390,72 @@ fun ThemeView(theme: InterviewTheme, index: Int, viewModel: SurveyViewModel) {
     if (theme.probes.isNotEmpty()) {
         Spacer(modifier = Modifier.height(16.dp))
         Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text("Follow-up Probes:", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = MaterialTheme.colorScheme.secondary)
+                Text("Follow-up Probes (Select & Answer):", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = MaterialTheme.colorScheme.secondary)
                 Spacer(modifier = Modifier.height(8.dp))
-                theme.probes.forEach { probe ->
-                    Row(modifier = Modifier.padding(vertical = 4.dp)) {
-                        Text("• ", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                        Text(probe, fontSize = 16.sp, lineHeight = 24.sp)
+                theme.probes.forEachIndexed { pIndex, probe ->
+                    val probeSelectedKey = "probe_selected_${theme.code}_$pIndex"
+                    val probeResponseKey = "probe_response_${theme.code}_$pIndex"
+                    
+                    val answers by viewModel.savedAnswers.collectAsState()
+                    val isSelected = answers[probeSelectedKey] == "true"
+                    val probeResponse = answers[probeResponseKey] ?: ""
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 6.dp)
+                            .border(
+                                width = 1.dp,
+                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                            .background(
+                                color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.05f) else Color.Transparent,
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                            .clickable {
+                                val nextSelectedState = if (isSelected) "false" else "true"
+                                viewModel.saveAnswer(probeSelectedKey, nextSelectedState)
+                            }
+                            .padding(12.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Checkbox(
+                                checked = isSelected,
+                                onCheckedChange = { checked ->
+                                    viewModel.saveAnswer(probeSelectedKey, if (checked) "true" else "false")
+                                }
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = probe,
+                                fontSize = 15.sp,
+                                lineHeight = 20.sp,
+                                modifier = Modifier.weight(1f)
+                            )
+                            IconButton(onClick = { viewModel.speakAloud(probe) }) {
+                                Icon(Icons.Default.VolumeUp, contentDescription = "Read Probe", tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f))
+                            }
+                        }
+                        if (isSelected) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            OutlinedTextField(
+                                value = probeResponse,
+                                onValueChange = { viewModel.saveAnswer(probeResponseKey, it) },
+                                modifier = Modifier.fillMaxWidth(),
+                                label = { Text("Notes for this probe") },
+                                placeholder = { Text("Type specific response notes for this probe...") },
+                                singleLine = false,
+                                maxLines = 4
+                            )
+                        }
                     }
                 }
             }

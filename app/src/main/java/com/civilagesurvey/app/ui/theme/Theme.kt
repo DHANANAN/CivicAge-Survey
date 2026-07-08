@@ -50,9 +50,11 @@ fun DCATheme(
     fontSizeMode: String = "Standard",
     content: @Composable () -> Unit
 ) {
-    val colorScheme = when (appearanceMode) {
-        "Black & White" -> BlackWhiteColorScheme
-        "Dark" -> DarkColorScheme
+    val colorScheme = when {
+        appearanceMode.contains("Black & White", ignoreCase = true) ||
+        appearanceMode.contains("B&W", ignoreCase = true) ||
+        appearanceMode.contains("Black", ignoreCase = true) -> BlackWhiteColorScheme
+        appearanceMode.contains("Dark", ignoreCase = true) -> DarkColorScheme
         else -> LightColorScheme
     }
 

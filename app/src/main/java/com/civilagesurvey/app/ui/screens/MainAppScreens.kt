@@ -28,6 +28,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.civilagesurvey.app.config.Config
@@ -53,16 +56,22 @@ fun MainSurveyApp(viewModel: SurveyViewModel) {
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    val userRole by viewModel.userRole.collectAsState()
 
-    val drawerItems = listOf(
-        Triple("Home", Icons.Default.Dashboard, "home"),
-        Triple("Instruments", Icons.AutoMirrored.Filled.Assignment, "instruments"),
-        Triple("Records", Icons.Default.History, "records"),
-        Triple("QA", Icons.Default.FactCheck, "qa"),
-        Triple("Export", Icons.Default.CloudUpload, "export"),
-        Triple("Settings", Icons.Default.Settings, "settings"),
-        Triple("Profile", Icons.Default.AccountCircle, "profile")
-    )
+    val drawerItems = remember(userRole) {
+        val list = mutableListOf(
+            Triple("Home", Icons.Default.Dashboard, "home"),
+            Triple("Instruments", Icons.AutoMirrored.Filled.Assignment, "instruments"),
+            Triple("Records", Icons.Default.History, "records"),
+            Triple("QA", Icons.Default.FactCheck, "qa")
+        )
+        if (userRole == Config.ADMIN_ROLE) {
+            list.add(Triple("Export", Icons.Default.CloudUpload, "export"))
+        }
+        list.add(Triple("Settings", Icons.Default.Settings, "settings"))
+        list.add(Triple("Profile", Icons.Default.AccountCircle, "profile"))
+        list
+    }
 
     var showExitDialog by remember { mutableStateOf(false) }
     var showDraftDialog by remember { mutableStateOf(false) }
@@ -249,14 +258,19 @@ fun MainSurveyApp(viewModel: SurveyViewModel) {
                         }
                         
                         NavigationBar(containerColor = MaterialTheme.colorScheme.surface, tonalElevation = 8.dp) {
-                            val items = listOf(
-                                Triple("Home", Icons.Default.Dashboard, "home"),
-                                Triple("Instruments", Icons.AutoMirrored.Filled.Assignment, "instruments"),
-                                Triple("Records", Icons.Default.History, "records"),
-                                Triple("QA", Icons.Default.FactCheck, "qa"),
-                                Triple("Export", Icons.Default.CloudUpload, "export"),
-                                Triple("Settings", Icons.Default.Settings, "settings")
-                            )
+                            val items = remember(userRole) {
+                                val list = mutableListOf(
+                                    Triple("Home", Icons.Default.Dashboard, "home"),
+                                    Triple("Instruments", Icons.AutoMirrored.Filled.Assignment, "instruments"),
+                                    Triple("Records", Icons.Default.History, "records"),
+                                    Triple("QA", Icons.Default.FactCheck, "qa")
+                                )
+                                if (userRole == Config.ADMIN_ROLE) {
+                                    list.add(Triple("Export", Icons.Default.CloudUpload, "export"))
+                                }
+                                list.add(Triple("Settings", Icons.Default.Settings, "settings"))
+                                list
+                            }
                             items.forEach { (label, icon, screen) ->
                                 NavigationBarItem(
                                     selected = currentScreen == screen,
@@ -325,6 +339,7 @@ fun MainSurveyApp(viewModel: SurveyViewModel) {
 @Composable
 fun LoginScreen(viewModel: SurveyViewModel, onLogin: () -> Unit) {
     var email by remember { mutableStateOf(viewModel.surveyorEmail.value) }
+    var password by remember { mutableStateOf("") }
     var name by remember { mutableStateOf(viewModel.surveyorName.value) }
     var id by remember { mutableStateOf(viewModel.surveyorId.value) }
     var phone by remember { mutableStateOf(viewModel.surveyorPhone.value) }
@@ -340,20 +355,52 @@ fun LoginScreen(viewModel: SurveyViewModel, onLogin: () -> Unit) {
         Text("Surveyor Profile Login", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
         Spacer(modifier = Modifier.height(12.dp))
         
-        OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Surveyor Full Name *") }, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(
+            value = email, 
+            onValueChange = { email = it }, 
+            label = { Text("Email / Username *") }, 
+            modifier = Modifier.fillMaxWidth()
+        )
         Spacer(modifier = Modifier.height(12.dp))
-        OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("Surveyor Email *") }, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(
+            value = password, 
+            onValueChange = { password = it }, 
+            label = { Text("Password *") }, 
+            visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Text("Optional Surveyor Profile Info", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Surveyor Full Name") }, modifier = Modifier.fillMaxWidth())
         Spacer(modifier = Modifier.height(12.dp))
-        OutlinedTextField(value = id, onValueChange = { id = it }, label = { Text("Surveyor ID / FI Code *") }, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(value = id, onValueChange = { id = it }, label = { Text("Surveyor ID / FI Code") }, modifier = Modifier.fillMaxWidth())
         Spacer(modifier = Modifier.height(12.dp))
         OutlinedTextField(value = phone, onValueChange = { phone = it }, label = { Text("Surveyor Phone") }, modifier = Modifier.fillMaxWidth())
         
         Spacer(modifier = Modifier.height(32.dp))
         Button(onClick = {
-            if (name.isNotBlank() && email.contains("@") && id.isNotBlank()) {
-                viewModel.signInOrSignUp(email, "", name, id, phone, false) { _, _ -> onLogin() }
+            val cleanEmail = email.trim().lowercase()
+            if (cleanEmail == "scscdata@gmail.com") {
+                if (password == "SCSCD@2026") {
+                    val finalName = name.ifBlank { "Master Administrator" }
+                    val finalId = id.ifBlank { "SCSC-MASTER" }
+                    viewModel.signInOrSignUp(cleanEmail, "", finalName, finalId, phone, false) { _, _ -> onLogin() }
+                } else {
+                    Toast.makeText(context, "Incorrect password for Master Role", Toast.LENGTH_SHORT).show()
+                }
+            } else if (cleanEmail == "scsc1") {
+                if (password == "SCSC2026") {
+                    val finalName = name.ifBlank { "Field Surveyor 1" }
+                    val finalId = id.ifBlank { "SCSC-NORMAL" }
+                    viewModel.signInOrSignUp("scsc1@civilagesurvey.app", "", finalName, finalId, phone, false) { _, _ -> onLogin() }
+                } else {
+                    Toast.makeText(context, "Incorrect password for Normal Role", Toast.LENGTH_SHORT).show()
+                }
             } else {
-                Toast.makeText(context, "Please fill all required (*) fields and provide a valid email", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, "Access Denied: Invalid credentials", Toast.LENGTH_LONG).show()
             }
         }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
             Text("Access Dashboard", fontWeight = FontWeight.Bold)
@@ -367,6 +414,8 @@ fun HomeScreen(viewModel: SurveyViewModel, onNavigate: (String) -> Unit) {
     val completedCount by viewModel.completedCount.collectAsState()
     val draftCount by viewModel.draftCount.collectAsState()
     val syncedCount by viewModel.syncedCount.collectAsState()
+    val userRole by viewModel.userRole.collectAsState()
+    val context = LocalContext.current
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
         Text("DCA Dashboard", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold)
@@ -385,8 +434,145 @@ fun HomeScreen(viewModel: SurveyViewModel, onNavigate: (String) -> Unit) {
         }
         Spacer(modifier = Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            QuickActionCard("Sync Data", Icons.Default.Sync, { onNavigate("export") }, Modifier.weight(1f))
+            if (userRole == Config.ADMIN_ROLE) {
+                QuickActionCard("Sync Data", Icons.Default.Sync, { onNavigate("export") }, Modifier.weight(1f))
+            }
             QuickActionCard("Profile", Icons.Default.AccountCircle, { onNavigate("profile") }, Modifier.weight(1f))
+            if (userRole != Config.ADMIN_ROLE) {
+                Spacer(modifier = Modifier.weight(1f))
+            }
+        }
+
+        if (userRole == Config.ADMIN_ROLE) {
+            Spacer(modifier = Modifier.height(24.dp))
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.AdminPanelSettings, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Master Control Panel", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    Text("Local Data Sync Server (Wi-Fi Tunnel)", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    val isServerRunning by viewModel.isSyncServerRunning.collectAsState()
+                    val serverStatus by viewModel.syncServerStatus.collectAsState()
+                    
+                    Text("Status: $serverStatus", style = MaterialTheme.typography.bodyMedium, color = if (isServerRunning) GreenSuccess else Color.Gray)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = {
+                                if (isServerRunning) viewModel.stopSyncServer() else viewModel.startSyncServer()
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(if (isServerRunning) "Stop Sync Server" else "Start Sync Server")
+                        }
+                    }
+                    
+                    val logs by viewModel.localSyncLogs.collectAsState()
+                    if (logs.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Connection Logs:", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                        Box(modifier = Modifier.height(80.dp).fillMaxWidth().background(Color.Black.copy(alpha = 0.05f), RoundedCornerShape(4.dp)).padding(4.dp)) {
+                            LazyColumn {
+                                items(logs) { log ->
+                                    Text(log, fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
+                                }
+                            }
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text("Xbox Control Services", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    var mockXboxTracker by remember { mutableStateOf(true) }
+                    var tunnelOverride by remember { mutableStateOf(false) }
+                    
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        Checkbox(checked = mockXboxTracker, onCheckedChange = { mockXboxTracker = it })
+                        Text("Mock Xbox Services Tracker", fontSize = 13.sp)
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        Checkbox(checked = tunnelOverride, onCheckedChange = { tunnelOverride = it })
+                        Text("Network Tunnel Force Override", fontSize = 13.sp)
+                    }
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = { Toast.makeText(context, "System Logs flushed successfully", Toast.LENGTH_SHORT).show() },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("System Logs")
+                        }
+                        OutlinedButton(
+                            onClick = { Toast.makeText(context, "User Management is synced with Cloud Portal", Toast.LENGTH_SHORT).show() },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("User Management")
+                        }
+                    }
+                }
+            }
+        } else {
+            Spacer(modifier = Modifier.height(24.dp))
+            var masterIpInput by remember { mutableStateOf("") }
+            val clientStatus by viewModel.clientSyncStatus.collectAsState()
+            
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Sync, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Sync Database to Master", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text("Connect to Master device on the same local Wi-Fi network to submit completed surveys.", fontSize = 14.sp, color = Color.Gray)
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    OutlinedTextField(
+                        value = masterIpInput,
+                        onValueChange = { masterIpInput = it },
+                        label = { Text("Master IP Address") },
+                        placeholder = { Text("e.g. 192.168.1.100") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    
+                    if (clientStatus.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(clientStatus, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                    }
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Button(
+                        onClick = {
+                            if (masterIpInput.isNotBlank()) {
+                                viewModel.syncSurveysToMaster(masterIpInput.trim()) { success, msg ->
+                                    Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                                }
+                            } else {
+                                Toast.makeText(context, "Please enter Master IP address first", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Transmit Records to Master")
+                    }
+                }
+            }
         }
     }
 }
@@ -765,6 +951,23 @@ fun ExportScreen(viewModel: SurveyViewModel) {
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("Export All to JSON (Copy to Clipboard)")
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        Button(
+            onClick = {
+                if (surveys.isEmpty()) {
+                    Toast.makeText(context, "No records to export.", Toast.LENGTH_SHORT).show()
+                } else {
+                    val tsvData = viewModel.exportAllSurveysToTsv(surveys)
+                    val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    val clip = android.content.ClipData.newPlainText("CivicAge Survey TSV Export", tsvData)
+                    clipboard.setPrimaryClip(clip)
+                    Toast.makeText(context, "Copied combined MCQ TSV (Excel-ready) data to clipboard!", Toast.LENGTH_LONG).show()
+                }
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Export All to Excel/TSV (Copy to Clipboard)")
         }
         Spacer(modifier = Modifier.height(12.dp))
         Button(

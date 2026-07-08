@@ -1,21 +1,21 @@
 {
   "project_info": {
-    "project_number": "777856548247",
-    "project_id": "civilage-survey",
-    "storage_bucket": "civilage-survey.firebasestorage.app"
+    "project_number": "127415575414",
+    "project_id": "scscdata-51bb8",
+    "storage_bucket": "scscdata-51bb8.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:777856548247:android:6f30f378b21933952398d2",
+        "mobilesdk_app_id": "1:127415575414:android:c98e3e5909d8caea8cd057",
         "android_client_info": {
-          "package_name": "com.civilagesurvey.app"
+          "package_name": "com.scsc.app"
         }
       },
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyAIsK3uoIitaotR1K9CloPMQKy3J_Pxelk"
+          "current_key": "AIzaSyBPRAwWb5f-jY0tvZhSFe77UDGY676PhwI"
         }
       ],
       "services": {

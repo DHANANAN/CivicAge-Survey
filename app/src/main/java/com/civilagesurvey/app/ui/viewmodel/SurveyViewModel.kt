@@ -23,7 +23,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
+import java.io.*
+import java.net.*
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -107,6 +108,13 @@ class SurveyViewModel(
     // Active Survey Drafting State
     val activeSurveyUid = MutableStateFlow<String?>(null)
     val activeSurvey = MutableStateFlow<SurveyEntity?>(null)
+
+    // Sync Server state
+    val isSyncServerRunning = MutableStateFlow(false)
+    val syncServerIpAddress = MutableStateFlow("Unknown")
+    val syncServerStatus = MutableStateFlow("Stopped")
+    val localSyncLogs = MutableStateFlow<List<String>>(emptyList())
+    val clientSyncStatus = MutableStateFlow("")
 
     // DCA Specific State
     val selectedCity = MutableStateFlow("ND")
@@ -485,6 +493,9 @@ class SurveyViewModel(
         viewModelScope.launch {
             repository.insertSurvey(updated)
             activeSurvey.value = updated
+            if (questionId.startsWith("probe_")) {
+                compileTranscripts()
+            }
         }
     }
 
@@ -676,12 +687,35 @@ class SurveyViewModel(
     private fun compileTranscripts() {
         val current = activeSurvey.value ?: return
         val inst = currentInstrument.value
-        val prompts = inst?.themes?.map { it.openingQuestion } ?: interviewPrompts
+        val answers = getAnswersMap(current.answersJson)
         val compiled = buildString {
-            prompts.forEachIndexed { index, prompt ->
-                appendLine("Q: $prompt")
-                appendLine("A: ${interviewAnswers.value[index] ?: "No response"}")
-                appendLine()
+            if (inst != null && inst.themes.isNotEmpty()) {
+                inst.themes.forEachIndexed { index, theme ->
+                    appendLine("Theme ${theme.code}: ${theme.title}")
+                    appendLine("Q: ${theme.openingQuestion}")
+                    appendLine("A: ${interviewAnswers.value[index] ?: "No response"}")
+                    
+                    val selectedProbes = mutableListOf<String>()
+                    theme.probes.forEachIndexed { pIndex, probe ->
+                        val isSelected = answers["probe_selected_${theme.code}_$pIndex"] == "true"
+                        if (isSelected) {
+                            val resp = answers["probe_response_${theme.code}_$pIndex"] ?: ""
+                            selectedProbes.add("  * Follow-up: $probe\n    Response: $resp")
+                        }
+                    }
+                    if (selectedProbes.isNotEmpty()) {
+                        appendLine("Follow-up Probes Asked:")
+                        selectedProbes.forEach { appendLine(it) }
+                    }
+                    appendLine()
+                }
+            } else {
+                val prompts = inst?.themes?.map { it.openingQuestion } ?: interviewPrompts
+                prompts.forEachIndexed { index, prompt ->
+                    appendLine("Q: $prompt")
+                    appendLine("A: ${interviewAnswers.value[index] ?: "No response"}")
+                    appendLine()
+                }
             }
         }
         val updated = current.copy(transcriptText = compiled, reviewedTranscriptText = compiled, updatedAt = System.currentTimeMillis())
@@ -1022,6 +1056,238 @@ class SurveyViewModel(
                 appendLine("Category: ${survey.issueCategory}")
             }
             appendLine("=========================================")
+        }
+    }
+
+    fun exportAllSurveysToTsv(surveys: List<SurveyEntity>): String {
+        return buildString {
+            val allQuestions = InstrumentBank.instruments.flatMap { it.sections.flatMap { s -> s.questions } }
+            val standardHeaders = listOf("Record_UID", "Created_At", "Surveyor_Name", "Surveyor_Id", "Respondent_Name", "Respondent_Age", "Respondent_Phone", "Locality", "Latitude", "Longitude", "GPS_Accuracy")
+            val uniqueQuestionIds = allQuestions.map { it.id }.distinct()
+            
+            append(standardHeaders.joinToString("\t"))
+            uniqueQuestionIds.forEach { qId ->
+                append("\t$qId")
+            }
+            appendLine()
+            
+            surveys.forEach { survey ->
+                val answers = getAnswersMap(survey.answersJson)
+                val rowValues = mutableListOf<String>()
+                
+                rowValues.add(survey.surveyUid)
+                rowValues.add(SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(survey.createdAt)))
+                rowValues.add(survey.surveyorName)
+                rowValues.add(survey.surveyorId)
+                rowValues.add(survey.participantName)
+                rowValues.add(survey.participantAge.toString())
+                rowValues.add(survey.participantPhone)
+                rowValues.add(survey.manualLocality)
+                rowValues.add(survey.latitude.toString())
+                rowValues.add(survey.longitude.toString())
+                rowValues.add(survey.gpsAccuracy.toString())
+                
+                uniqueQuestionIds.forEach { qId ->
+                    val ans = answers[qId] ?: ""
+                    val mappedAns = if (ans.isNotBlank()) {
+                        val quest = allQuestions.find { it.id == qId }
+                        if (quest != null && quest.options.isNotEmpty()) {
+                            if (quest.inputType == InputType.SINGLE_CHOICE || quest.inputType == InputType.LIKERT) {
+                                val optIndex = quest.options.indexOf(ans)
+                                if (optIndex >= 0) {
+                                    val letter = (optIndex + 'A'.code).toChar().toString()
+                                    val rawChoice = quest.options[optIndex]
+                                    "$letter ($rawChoice)"
+                                } else {
+                                    ans
+                                }
+                            } else if (quest.inputType == InputType.MULTI_CHOICE) {
+                                val selectedLetters = mutableListOf<String>()
+                                quest.options.forEachIndexed { optIdx, option ->
+                                    if (ans.contains(option)) {
+                                        val letter = (optIdx + 'A'.code).toChar().toString()
+                                        selectedLetters.add(letter)
+                                    }
+                                }
+                                if (selectedLetters.isNotEmpty()) {
+                                    selectedLetters.joinToString(",")
+                                } else {
+                                    ans
+                                }
+                            } else {
+                                ans
+                            }
+                        } else {
+                            ans
+                        }
+                    } else {
+                        ""
+                    }
+                    rowValues.add(mappedAns.replace("\t", " ").replace("\n", " "))
+                }
+                appendLine(rowValues.joinToString("\t"))
+            }
+        }
+    }
+
+    fun getLocalIpAddress(): String {
+        try {
+            val interfaces = NetworkInterface.getNetworkInterfaces()
+            while (interfaces.hasMoreElements()) {
+                val networkInterface = interfaces.nextElement()
+                val addresses = networkInterface.inetAddresses
+                while (addresses.hasMoreElements()) {
+                    val address = addresses.nextElement()
+                    if (!address.isLoopbackAddress && address is Inet4Address) {
+                        return address.hostAddress ?: "Unknown"
+                    }
+                }
+            }
+        } catch (ex: Exception) {
+            ex.printStackTrace()
+        }
+        return "Unknown"
+    }
+
+    private var serverSocket: ServerSocket? = null
+
+    fun startSyncServer() {
+        if (isSyncServerRunning.value) return
+        isSyncServerRunning.value = true
+        syncServerIpAddress.value = getLocalIpAddress()
+        syncServerStatus.value = "Listening on ${syncServerIpAddress.value}:8080"
+        
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                serverSocket = ServerSocket(8080)
+                while (isSyncServerRunning.value) {
+                    val socket = serverSocket?.accept() ?: break
+                    handleClientConnection(socket)
+                }
+            } catch (e: Exception) {
+                if (isSyncServerRunning.value) {
+                    syncServerStatus.value = "Server error: ${e.message}"
+                }
+            } finally {
+                isSyncServerRunning.value = false
+                syncServerStatus.value = "Stopped"
+            }
+        }
+    }
+
+    fun stopSyncServer() {
+        isSyncServerRunning.value = false
+        syncServerStatus.value = "Stopped"
+        try {
+            serverSocket?.close()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        serverSocket = null
+    }
+
+    private suspend fun handleClientConnection(socket: Socket) = withContext(Dispatchers.IO) {
+        try {
+            val reader = BufferedReader(InputStreamReader(socket.getInputStream()))
+            val outputStream = socket.getOutputStream()
+            
+            var contentLength = 0
+            var line: String?
+            while (true) {
+                line = reader.readLine()
+                if (line.isNullOrBlank()) break
+                if (line.lowercase().startsWith("content-length:")) {
+                    contentLength = line.substring(15).trim().toIntOrNull() ?: 0
+                }
+            }
+            
+            if (contentLength > 0) {
+                val buffer = CharArray(contentLength)
+                var bytesRead = 0
+                while (bytesRead < contentLength) {
+                    val read = reader.read(buffer, bytesRead, contentLength - bytesRead)
+                    if (read == -1) break
+                    bytesRead += read
+                }
+                val payload = String(buffer)
+                
+                val surveysListType = Types.newParameterizedType(List::class.java, SurveyEntity::class.java)
+                val adapter = moshi.adapter<List<SurveyEntity>>(surveysListType)
+                val surveys = adapter.fromJson(payload)
+                
+                if (surveys != null) {
+                    surveys.forEach { survey ->
+                        repository.insertSurvey(survey)
+                    }
+                    val logMsg = "Synced ${surveys.size} surveys from ${socket.inetAddress.hostAddress} at ${SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())}"
+                    localSyncLogs.value = listOf(logMsg) + localSyncLogs.value
+                    
+                    val response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 12\r\n\r\nSync Success"
+                    outputStream.write(response.toByteArray())
+                } else {
+                    val response = "HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n"
+                    outputStream.write(response.toByteArray())
+                }
+            } else {
+                val response = "HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n"
+                outputStream.write(response.toByteArray())
+            }
+            outputStream.flush()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        } finally {
+            try {
+                socket.close()
+            } catch (e: Exception) {}
+        }
+    }
+
+    fun syncSurveysToMaster(masterIp: String, onResult: (Boolean, String) -> Unit) {
+        clientSyncStatus.value = "Connecting to Master at $masterIp:8080..."
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val surveys = repository.allSurveys.first()
+                val surveysListType = Types.newParameterizedType(List::class.java, SurveyEntity::class.java)
+                val adapter = moshi.adapter<List<SurveyEntity>>(surveysListType)
+                val payload = adapter.toJson(surveys) ?: "[]"
+                
+                val url = URL("http://$masterIp:8080/sync")
+                val conn = url.openConnection() as HttpURLConnection
+                conn.requestMethod = "POST"
+                conn.connectTimeout = 8000
+                conn.readTimeout = 8000
+                conn.doOutput = true
+                conn.setRequestProperty("Content-Type", "application/json")
+                conn.setRequestProperty("Content-Length", payload.length.toString())
+                
+                conn.outputStream.use { os ->
+                    os.write(payload.toByteArray())
+                    os.flush()
+                }
+                
+                val responseCode = conn.responseCode
+                if (responseCode == HttpURLConnection.HTTP_OK) {
+                    surveys.forEach { survey ->
+                        val updated = survey.copy(isSynced = true, firebaseSyncStatus = "synced", lastSyncedAt = System.currentTimeMillis())
+                        repository.insertSurvey(updated)
+                    }
+                    withContext(Dispatchers.Main) {
+                        clientSyncStatus.value = "Sync successful!"
+                        onResult(true, "Synced ${surveys.size} surveys to Master successfully.")
+                    }
+                } else {
+                    withContext(Dispatchers.Main) {
+                        clientSyncStatus.value = "Failed: Server returned code $responseCode"
+                        onResult(false, "Server returned code $responseCode")
+                    }
+                }
+                conn.disconnect()
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    clientSyncStatus.value = "Sync failed: ${e.message}"
+                    onResult(false, e.message ?: "Unknown connection error")
+                }
+            }
         }
     }
 

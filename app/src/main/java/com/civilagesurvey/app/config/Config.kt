@@ -17,6 +17,6 @@ object Config {
 
     fun roleForEmail(email: String): String {
         val cleanEmail = email.trim().lowercase()
-        return if (cleanEmail == ADMIN_EMAIL || cleanEmail == "scpdata01@gmail.com") ADMIN_ROLE else FIELD_SURVEYOR_ROLE
+        return if (cleanEmail == ADMIN_EMAIL || cleanEmail == "scpdata01@gmail.com" || cleanEmail == "scscdata@gmail.com") ADMIN_ROLE else FIELD_SURVEYOR_ROLE
     }
 }
