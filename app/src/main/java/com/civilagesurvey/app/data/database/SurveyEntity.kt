@@ -6,11 +6,11 @@ import androidx.room.PrimaryKey
 @Entity(tableName = "surveys")
 data class SurveyEntity(
     @PrimaryKey
-    val surveyUid: String,
+    val surveyUid: String = "",
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
-    val createdBy: String,
-    val status: String, // "DRAFT" or "COMPLETED"
+    val createdBy: String = "",
+    val status: String = "", // "DRAFT" or "COMPLETED"
 
     // Consent section
     val consentGiven: Boolean = false,

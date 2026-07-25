@@ -39,6 +39,37 @@ class SurveyViewModel(
     private val audioRecorder = AudioRecorderHelper(context)
     private var ttsHelper = TextToSpeechHelper(context)
     private val googleFormsAuthManager = GoogleFormsAuthManager(context)
+    private var firestoreSyncListener: com.google.firebase.firestore.ListenerRegistration? = null
+
+    fun startRealtimeFirestoreSync() {
+        if (firestoreSyncListener != null) return
+        if (userRole.value == Config.ADMIN_ROLE) {
+            val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+            firestoreSyncListener = firestore.collection("surveyResponses")
+                .addSnapshotListener { snapshots, e ->
+                    if (e != null) {
+                        return@addSnapshotListener
+                    }
+                    if (snapshots != null) {
+                        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                            for (doc in snapshots.documentChanges) {
+                                try {
+                                    val survey = doc.document.toObject(SurveyEntity::class.java)
+                                    repository.insertSurvey(survey)
+                                } catch (ex: Exception) {
+                                    ex.printStackTrace()
+                                }
+                            }
+                        }
+                    }
+                }
+        }
+    }
+
+    fun stopRealtimeFirestoreSync() {
+        firestoreSyncListener?.remove()
+        firestoreSyncListener = null
+    }
 
     // User Session
     val surveyorPhone = MutableStateFlow("")
@@ -198,6 +229,7 @@ class SurveyViewModel(
                 }
             }
         }
+        startRealtimeFirestoreSync()
     }
 
     fun saveSurvivorProfile(name: String, age: String, email: String, phone: String) {
@@ -256,6 +288,8 @@ class SurveyViewModel(
             .putString("userRole", role)
             .apply()
 
+        startRealtimeFirestoreSync()
+
         onResult(true, "Signed in locally as $role")
     }
 
@@ -280,6 +314,7 @@ class SurveyViewModel(
     }
 
     fun logout() {
+        stopRealtimeFirestoreSync()
         surveyorEmail.value = ""
         surveyorName.value = ""
         surveyorId.value = ""

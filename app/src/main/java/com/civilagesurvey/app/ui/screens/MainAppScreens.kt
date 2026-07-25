@@ -449,29 +449,23 @@ fun HomeScreen(viewModel: SurveyViewModel, onNavigate: (String) -> Unit) {
         Text("DCA Dashboard", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold)
         Text("Smart Cities, Silent Citizens | ICSSR 2025-26", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
         
-        Spacer(modifier = Modifier.height(24.dp))
-        DashboardStats(allSurveys.size, draftCount, completedCount, syncedCount)
-        
-        Spacer(modifier = Modifier.height(24.dp))
-        Text("Quick Actions", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(12.dp))
-        
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            QuickActionCard("Start Instrument", Icons.Default.Add, { onNavigate("instruments") }, Modifier.weight(1f))
-            QuickActionCard("View Records", Icons.Default.History, { onNavigate("records") }, Modifier.weight(1f))
-        }
-        Spacer(modifier = Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            if (userRole == Config.ADMIN_ROLE) {
-                QuickActionCard("Sync Data", Icons.Default.Sync, { onNavigate("export") }, Modifier.weight(1f))
-            }
-            QuickActionCard("Profile", Icons.Default.AccountCircle, { onNavigate("profile") }, Modifier.weight(1f))
-            if (userRole != Config.ADMIN_ROLE) {
-                Spacer(modifier = Modifier.weight(1f))
-            }
-        }
-
         if (userRole == Config.ADMIN_ROLE) {
+            DashboardStats(allSurveys.size, draftCount, completedCount, syncedCount)
+            
+            Spacer(modifier = Modifier.height(24.dp))
+            Text("Quick Actions", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                QuickActionCard("Start Instrument", Icons.Default.Add, { onNavigate("instruments") }, Modifier.weight(1f))
+                QuickActionCard("View Records", Icons.Default.History, { onNavigate("records") }, Modifier.weight(1f))
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                QuickActionCard("Sync Data", Icons.Default.Sync, { onNavigate("export") }, Modifier.weight(1f))
+                QuickActionCard("Profile", Icons.Default.AccountCircle, { onNavigate("profile") }, Modifier.weight(1f))
+            }
+
             Spacer(modifier = Modifier.height(24.dp))
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -518,7 +512,7 @@ fun HomeScreen(viewModel: SurveyViewModel, onNavigate: (String) -> Unit) {
                     }
                     
                     Spacer(modifier = Modifier.height(16.dp))
-                    Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
                     Spacer(modifier = Modifier.height(12.dp))
 
                     Text("Xbox Control Services", fontWeight = FontWeight.Bold, fontSize = 15.sp)
@@ -553,99 +547,37 @@ fun HomeScreen(viewModel: SurveyViewModel, onNavigate: (String) -> Unit) {
                 }
             }
         } else {
-            Spacer(modifier = Modifier.height(24.dp))
-            var masterIpInput by remember { mutableStateOf("") }
-            var masterEmailInput by remember { mutableStateOf("scscdata@gmail.com") }
-            val clientStatus by viewModel.clientSyncStatus.collectAsState()
-            
             Card(
-                modifier = Modifier.fillMaxWidth(),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onNavigate("instruments") },
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Sync, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Sync Database to Master", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
-                    }
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text("Option A: Sync via Local Wi-Fi IP", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    OutlinedTextField(
-                        value = masterIpInput,
-                        onValueChange = { masterIpInput = it },
-                        label = { Text("Master IP Address") },
-                        placeholder = { Text("e.g. 192.168.1.100") },
-                        modifier = Modifier.fillMaxWidth()
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        Icons.Default.AddCircle,
+                        contentDescription = null,
+                        modifier = Modifier.size(64.dp),
+                        tint = MaterialTheme.colorScheme.primary
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Button(
-                        onClick = {
-                            if (masterIpInput.isNotBlank()) {
-                                viewModel.syncSurveysToMaster(masterIpInput.trim()) { success, msg ->
-                                    Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
-                                }
-                            } else {
-                                Toast.makeText(context, "Please enter Master IP address first", Toast.LENGTH_SHORT).show()
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Transmit Records (Local Wi-Fi)")
-                    }
-                    
                     Spacer(modifier = Modifier.height(16.dp))
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
-                    Spacer(modifier = Modifier.height(12.dp))
-                    
-                    Text("Option B: Sync via Master Email", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    OutlinedTextField(
-                        value = masterEmailInput,
-                        onValueChange = { masterEmailInput = it },
-                        label = { Text("Master Gmail Address") },
-                        modifier = Modifier.fillMaxWidth()
+                    Text(
+                        "Start a Research Instrument",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    Button(
-                        onClick = {
-                            if (allSurveys.isEmpty()) {
-                                Toast.makeText(context, "No local survey records to sync.", Toast.LENGTH_SHORT).show()
-                            } else if (masterEmailInput.isBlank() || !masterEmailInput.contains("@")) {
-                                Toast.makeText(context, "Please enter a valid Master Gmail address", Toast.LENGTH_SHORT).show()
-                            } else {
-                                val subject = "SCSC Survey Data Sync - Surveyor ${viewModel.surveyorName.value}"
-                                val reportBuilder = java.lang.StringBuilder()
-                                reportBuilder.appendLine("CIVICAGE SURVEY DATA SYNC - SCSC")
-                                reportBuilder.appendLine("Surveyor: ${viewModel.surveyorName.value} (ID: ${viewModel.surveyorId.value})")
-                                reportBuilder.appendLine("Total Records: ${allSurveys.size}")
-                                reportBuilder.appendLine("Generated At: ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())}")
-                                reportBuilder.appendLine("=========================================\n")
-                                allSurveys.forEachIndexed { idx, s ->
-                                    val ordinal = when {
-                                        (idx + 1) % 100 in 11..13 -> "${idx + 1}th"
-                                        (idx + 1) % 10 == 1 -> "${idx + 1}st"
-                                        (idx + 1) % 10 == 2 -> "${idx + 1}nd"
-                                        (idx + 1) % 10 == 3 -> "${idx + 1}rd"
-                                        else -> "${idx + 1}th"
-                                    }
-                                    reportBuilder.appendLine("$ordinal Survey Record:")
-                                    reportBuilder.appendLine(viewModel.buildDetailedReportText(s))
-                                    reportBuilder.appendLine("\n-----------------------------------------\n")
-                                }
-                                shareSurveyReportViaMasterEmail(context, reportBuilder.toString(), subject, masterEmailInput.trim())
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
-                    ) {
-                        Text("Transmit Records (Email)")
-                    }
-                    
-                    if (clientStatus.isNotBlank()) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(clientStatus, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-                    }
+                    Text(
+                        "Click here to select a survey instrument and begin a participant interview session.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = TextAlign.Center,
+                        color = Color.Gray
+                    )
                 }
             }
         }
@@ -694,6 +626,7 @@ fun InstrumentSelectorScreen(viewModel: SurveyViewModel, onNavigate: () -> Unit)
     val instruments = InstrumentBank.instruments
     val context = LocalContext.current
     var selectedCity by remember { mutableStateOf(viewModel.selectedCity.value) }
+    val userRole by viewModel.userRole.collectAsState()
 
     var showIntakeDialog by remember { mutableStateOf(false) }
     var targetInstrument by remember { mutableStateOf<Instrument?>(null) }
@@ -741,6 +674,8 @@ fun InstrumentSelectorScreen(viewModel: SurveyViewModel, onNavigate: () -> Unit)
                         color = MaterialTheme.colorScheme.primary
                     )
                     
+                    val isFirstTwo = targetInstrument?.let { it.code == "SQ-OOP" || it.code == "SSI-OOP" } ?: false
+
                     OutlinedTextField(
                         value = respondentName,
                         onValueChange = { respondentName = it },
@@ -748,19 +683,21 @@ fun InstrumentSelectorScreen(viewModel: SurveyViewModel, onNavigate: () -> Unit)
                         modifier = Modifier.fillMaxWidth()
                     )
                     
-                    OutlinedTextField(
-                        value = respondentAge,
-                        onValueChange = { respondentAge = it },
-                        label = { Text("Respondent Age *") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    
-                    OutlinedTextField(
-                        value = respondentMobile,
-                        onValueChange = { respondentMobile = it },
-                        label = { Text("Mobile Number *") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    if (isFirstTwo) {
+                        OutlinedTextField(
+                            value = respondentAge,
+                            onValueChange = { respondentAge = it },
+                            label = { Text("Respondent Age *") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        
+                        OutlinedTextField(
+                            value = respondentMobile,
+                            onValueChange = { respondentMobile = it },
+                            label = { Text("Mobile Number (Optional)") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                     
                     // City defaults to "ND" silently
                     Spacer(modifier = Modifier.height(8.dp))
@@ -785,7 +722,7 @@ fun InstrumentSelectorScreen(viewModel: SurveyViewModel, onNavigate: () -> Unit)
                             color = if (intakeLocationStatus.contains("Fetching")) MaterialTheme.colorScheme.primary else RedError
                         )
                     }
-
+ 
                     Button(
                         onClick = {
                             if (hasFineLocation || hasCoarseLocation) {
@@ -810,28 +747,37 @@ fun InstrumentSelectorScreen(viewModel: SurveyViewModel, onNavigate: () -> Unit)
             confirmButton = {
                 Button(
                     onClick = {
-                        val ageInt = respondentAge.toIntOrNull()
-                        val isMobileValid = respondentMobile.isNotBlank() && respondentMobile.matches(Regex("^[0-9+() -]+$"))
+                        val isFirstTwo = targetInstrument?.let { it.code == "SQ-OOP" || it.code == "SSI-OOP" } ?: false
                         
-                        if (respondentName.isBlank() || respondentAge.isBlank() || respondentMobile.isBlank()) {
-                            Toast.makeText(context, "Please fill all fields", Toast.LENGTH_SHORT).show()
-                            return@Button
-                        }
-                        if (!isMobileValid) {
-                            Toast.makeText(context, "Please enter a valid mobile number", Toast.LENGTH_SHORT).show()
+                        if (respondentName.isBlank()) {
+                            Toast.makeText(context, "Please enter respondent name", Toast.LENGTH_SHORT).show()
                             return@Button
                         }
                         
-                        if (targetInstrument!!.code.contains("OOP") && (ageInt == null || ageInt < 75)) {
-                            Toast.makeText(context, "Warning: Participant age is below 75 years (Target Population)", Toast.LENGTH_LONG).show()
+                        if (isFirstTwo) {
+                            if (respondentAge.isBlank()) {
+                                Toast.makeText(context, "Please enter respondent age", Toast.LENGTH_SHORT).show()
+                                return@Button
+                            }
+                            val ageInt = respondentAge.toIntOrNull()
+                            if (targetInstrument!!.code.contains("OOP") && (ageInt == null || ageInt < 75)) {
+                                Toast.makeText(context, "Warning: Participant age is below 75 years (Target Population)", Toast.LENGTH_LONG).show()
+                            }
+                            if (respondentMobile.isNotBlank() && !respondentMobile.matches(Regex("^[0-9+() -]+$"))) {
+                                Toast.makeText(context, "Please enter a valid mobile number", Toast.LENGTH_SHORT).show()
+                                return@Button
+                            }
                         }
+                        
+                        val finalAge = if (isFirstTwo) respondentAge else "0"
+                        val finalMobile = if (isFirstTwo) respondentMobile else ""
                         
                         viewModel.selectedCity.value = respondentCity
                         viewModel.startDcaSession(
                             instrument = targetInstrument!!,
                             rName = respondentName,
-                            rAge = respondentAge,
-                            rMobile = respondentMobile,
+                            rAge = finalAge,
+                            rMobile = finalMobile,
                             rCity = respondentCity
                         )
                         showIntakeDialog = false
@@ -851,7 +797,7 @@ fun InstrumentSelectorScreen(viewModel: SurveyViewModel, onNavigate: () -> Unit)
 
         LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             items(instruments) { instrument ->
-                InstrumentCard(instrument) {
+                InstrumentCard(instrument, enabled = (userRole != Config.ADMIN_ROLE)) {
                     targetInstrument = instrument
                     respondentName = ""
                     respondentAge = ""
@@ -878,12 +824,12 @@ fun CitySelector(selected: String, onSelect: (String) -> Unit) {
 }
 
 @Composable
-fun InstrumentCard(instrument: Instrument, onClick: () -> Unit) {
+fun InstrumentCard(instrument: Instrument, enabled: Boolean = true, onClick: () -> Unit) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     
     val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.95f else 1.0f,
+        targetValue = if (isPressed && enabled) 0.95f else 1.0f,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioMediumBouncy,
             stiffness = Spring.StiffnessLow
@@ -899,8 +845,9 @@ fun InstrumentCard(instrument: Instrument, onClick: () -> Unit) {
                 scaleY = scale
             }
             .clickable(
+                enabled = enabled,
                 interactionSource = interactionSource,
-                indication = LocalIndication.current,
+                indication = if (enabled) LocalIndication.current else null,
                 onClick = onClick
             )
     ) {
@@ -1028,12 +975,19 @@ fun ExportScreen(viewModel: SurveyViewModel) {
                     val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                     val clip = android.content.ClipData.newPlainText("CivicAge Survey JSON Export", combinedJson)
                     clipboard.setPrimaryClip(clip)
-                    Toast.makeText(context, "Copied combined JSON to clipboard!", Toast.LENGTH_LONG).show()
+                    
+                    try {
+                        val file = java.io.File(context.cacheDir, "surveys_export.json")
+                        file.writeText(combinedJson)
+                        Toast.makeText(context, "Copied JSON to clipboard and saved to: ${file.absolutePath}", Toast.LENGTH_LONG).show()
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "Copied to clipboard, but error saving to cache: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
                 }
             },
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text("Export All to JSON (Copy to Clipboard)")
+            Text("Export All to JSON (Copy & Save to Cache)")
         }
         Spacer(modifier = Modifier.height(12.dp))
         Button(

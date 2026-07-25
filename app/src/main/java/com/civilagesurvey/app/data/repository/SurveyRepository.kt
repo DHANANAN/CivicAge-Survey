@@ -16,7 +16,14 @@ class SurveyRepository(private val surveyDao: SurveyDao) {
 
     suspend fun getSurveyById(uid: String): SurveyEntity? = surveyDao.getSurveyById(uid)
 
-    suspend fun insertSurvey(survey: SurveyEntity) = surveyDao.insertSurvey(survey)
+    suspend fun insertSurvey(survey: SurveyEntity) {
+        surveyDao.insertSurvey(survey)
+        if (survey.status == "COMPLETED") {
+            kotlin.runCatching {
+                syncSurveyToFirestore(survey)
+            }
+        }
+    }
 
     suspend fun deleteSurvey(survey: SurveyEntity) = surveyDao.deleteSurvey(survey)
 
