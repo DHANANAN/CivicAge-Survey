@@ -1,35 +1,67 @@
 # DCA (Smart Cities Responsible Citizens Initiative) Deployment & Operations Guide
 
 ## 1. Overview
-The DCA Mobile Survey application provides multi-tier role-based access (`master`, `qa`, `normal`) for smart city field data collection. When a survey instrument is approved by a QA user or Master Administrator, a Firebase Cloud Function automatically uploads formatted datasets (`payload.json`, `summary.csv`, and `metadata.json`) to Google Drive owned by `scscpdata@gmail.com`.
+The DCA Mobile Survey application features a streamlined **Records-only cloud sync flow**. When a survey record is completed, it is written to Firestore `records/{recordId}` and automatically synced to **Google Sheets (`DCA_Records`)** and **Google Drive** subfolders (`DCA/{YYYY}/{city}/{userId}_{displayName}/{instrumentType}/{recordId}/`) owned by `scscpdata@gmail.com`.
 
 ---
 
-## 2. GCP & Firebase Infrastructure Setup
+## 2. Google Sheets & Apps Script Setup (Chrome Walkthrough)
 
-### 2.1 Firebase Cloud Functions Deployment
+### 2.1 Google Sheets Creation
+1. Open Google Chrome while logged into `scscpdata@gmail.com`.
+2. Navigate to [Google Sheets](https://sheets.google.com).
+3. Create a **New Blank Spreadsheet**.
+4. Rename the spreadsheet to `DCA_Records`.
+5. Add the following header row in Row 1 (Columns A to K):
+   - `recordId`
+   - `userId`
+   - `displayName`
+   - `geoLat`
+   - `geoLng`
+   - `geoAccuracy`
+   - `geoTimestamp`
+   - `consentGiven`
+   - `status`
+   - `driveFileId`
+   - `drivePath`
+
+### 2.2 Apps Script Web App Deployment
+1. In the `DCA_Records` Google Sheet, click **Extensions** -> **Apps Script**.
+2. Replace all existing code with the contents of `scripts/apps-script-records.gs`.
+3. Click **Save** (disk icon).
+4. Click **Deploy** -> **New Deployment**.
+5. Select type: **Web app**.
+   - **Description**: `DCA Records Cloud Sync API`
+   - **Execute as**: `Me (scscpdata@gmail.com)`
+   - **Who has access**: `Anyone`
+6. Click **Deploy** and authorize permissions when prompted.
+7. Copy the resulting **Web App URL** (e.g. `https://script.google.com/macros/s/.../exec`).
+
+---
+
+## 3. Firebase & GCP Infrastructure Setup
+
+### 3.1 Cloud Functions Deployment
 1. Navigate to the `functions/` directory:
    ```bash
    cd functions
    npm install
    npm run build
    ```
-2. Deploy Cloud Functions:
+2. Deploy the `onRecordCreated` trigger:
    ```bash
    firebase deploy --only functions
    ```
 
-### 2.2 Google Cloud Service Account IAM & Drive Delegation
-1. Go to the **Google Cloud Console** -> **IAM & Admin** -> **Service Accounts**.
-2. Create or select the service account associated with project `scscdata-51bb8`.
-3. Enable the **Google Drive API** in GCP Console.
-4. Grant the Service Account the following IAM roles:
-   - `Roles/Editor` or `Roles/Firebase Admin`
-   - `Roles/Storage Object Admin`
-5. Share the root Google Drive folder (`DCA/`) owned by `scscpdata@gmail.com` with the Service Account email address, granting **Editor** access.
+### 3.2 Google Cloud Service Account IAM & Drive Delegation
+1. Open **Google Cloud Console** -> **IAM & Admin** -> **Service Accounts**.
+2. Select the service account for project `scscdata-51bb8`.
+3. Ensure **Google Drive API** is enabled.
+4. Grant the Service Account the **Editor** role.
+5. In Google Drive under `scscpdata@gmail.com`, create or select the root folder `DCA` and share it with the Service Account email address as **Editor**.
 
-### 2.3 Drive Target Folder Structure
-The Cloud Function automatically creates and maintains the following idempotent directory structure:
+### 3.3 Target Drive Folder Hierarchy
+The Cloud Function automatically creates and maintains the following directory structure:
 ```
 Google Drive/
 └── DCA/
@@ -37,7 +69,7 @@ Google Drive/
         └── {city}/
             └── {userId}_{displayName}/
                 └── {instrumentType}/
-                    └── {instrumentId}/
+                    └── {recordId}/
                         ├── payload.json
                         ├── summary.csv
                         └── metadata.json
@@ -45,49 +77,37 @@ Google Drive/
 
 ---
 
-## 3. Firestore Security Rules Deployment
-Deploy the updated security rules to enforce role-based access and server-side geo-tag validation:
+## 4. Firestore Security Rules Deployment
+Deploy the rules enforcing strict geo validation (`accuracy <= 100m`) and consent:
 ```bash
 firebase deploy --only firestore:rules
 ```
 
 ---
 
-## 4. Google Apps Script Alternative Endpoint (Fallback)
-If Cloud Functions are temporarily unavailable or quota-limited, deploy the standalone Google Apps Script snippet:
-1. Open Google Apps Script while logged into `scscpdata@gmail.com`.
-2. Paste the contents of `scripts/apps-script.gs`.
-3. Deploy as a **Web App**:
-   - **Execute as**: *Me (scscpdata@gmail.com)*
-   - **Who has access**: *Anyone*
-4. Set the secret header variable `X-DCA-Auth-Token` to match the token configured in client settings.
-
----
-
 ## 5. Operational Runbook: Drive Failure Recovery & Retries
 
-### 5.1 Quota & Rate Limit Errors (HTTP 429 / 503)
-The Cloud Function automatically executes exponential backoff retries:
-- **Base delay**: 1 second
-- **Max attempts**: 5 attempts
-- **Multiplier**: $2^n$
+### 5.1 Automatic Exponential Backoff
+The Cloud Function executes exponential backoff retries for status codes 429 and 5xx:
+- Initial delay: 1000ms
+- Max attempts: 4
+- Multiplier: $2^n$
 
-### 5.2 Manual Backfill / Retry Trigger
-If a push fails permanently:
-1. Open Firebase Console -> Firestore -> `drivePushLogs`.
-2. Locate the failed entry by `instrumentId`.
-3. In Firestore -> `instruments/{instrumentId}`, reset `status` to `"pending_qa"` and re-approve from the QA Dashboard or run:
+### 5.2 Manual Backfill Trigger
+If a sync fails permanently:
+1. Check Firestore `drivePushLogs` collection for error details.
+2. Touch the document in `records/{recordId}` to trigger re-sync:
    ```javascript
-   db.collection("instruments").doc(instrumentId).update({ status: "approved" });
+   db.collection("records").doc(recordId).update({ updatedAt: Date.now() });
    ```
 
 ---
 
 ## 6. Audit & Acceptance Checklist
 
-- [x] Cloud Function `onInstrumentApproved` registered and deployed.
-- [x] Firestore security rules block client direct approval and enforce geo accuracy `<= 100m`.
-- [x] Dual-tier location enforcement (Strict vs Soft Warning) implemented in Android client.
-- [x] Master Control Panel moved to `Settings -> Advanced` with Biometric & Password unlock.
-- [x] Swipe left/right gestures with first-time hint overlay and Undo snackbar working.
-- [x] `payload.json`, `summary.csv`, and `metadata.json` generated for every approved instrument.
+- [x] Google Sheet `DCA_Records` created with specified 11 columns.
+- [x] Apps Script `doPost` endpoint deployed under `scscpdata@gmail.com`.
+- [x] Firebase Cloud Function `onRecordCreated` deployed on `records/{recordId}`.
+- [x] Firestore security rules block submissions without geo accuracy <= 100m.
+- [x] Master Control Panel protected under `Settings -> Advanced` with Biometric unlock.
+- [x] Swipe navigation configured for app screen navigation.

@@ -75,9 +75,6 @@ fun MainSurveyApp(viewModel: SurveyViewModel) {
             Triple("Instruments", Icons.AutoMirrored.Filled.Assignment, "instruments"),
             Triple("Records", Icons.Default.History, "records")
         )
-        if (userRole == Config.ROLE_QA || userRole == Config.ROLE_MASTER || userRole == Config.ADMIN_ROLE) {
-            list.add(Triple("QA Dashboard", Icons.Default.FactCheck, "qa"))
-        }
         if (userRole == Config.ROLE_MASTER || userRole == Config.ADMIN_ROLE) {
             list.add(Triple("Export", Icons.Default.CloudUpload, "export"))
         }
@@ -252,9 +249,6 @@ fun MainSurveyApp(viewModel: SurveyViewModel) {
                                     Triple("Instruments", Icons.AutoMirrored.Filled.Assignment, "instruments"),
                                     Triple("Records", Icons.Default.History, "records")
                                 )
-                                if (userRole == Config.ROLE_QA || userRole == Config.ROLE_MASTER || userRole == Config.ADMIN_ROLE) {
-                                    list.add(Triple("QA Queue", Icons.Default.FactCheck, "qa"))
-                                }
                                 if (userRole == Config.ROLE_MASTER || userRole == Config.ADMIN_ROLE) {
                                     list.add(Triple("Export", Icons.Default.CloudUpload, "export"))
                                 }

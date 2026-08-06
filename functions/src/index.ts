@@ -26,7 +26,6 @@ export async function withExponentialBackoff<T>(
       if (attempt === maxRetries) {
         throw err;
       }
-      // Retryable status codes (e.g. Rate Limit 429, Server Error 5xx)
       const statusCode = err?.response?.status || err?.code;
       if (statusCode === 429 || (statusCode >= 500 && statusCode < 600) || err.code === 'ECONNRESET') {
         console.warn(`[DriveSync] Attempt ${attempt} failed with status ${statusCode}. Retrying in ${delay}ms...`);
@@ -41,7 +40,7 @@ export async function withExponentialBackoff<T>(
 }
 
 /**
- * Initialize Google Drive Client using Service Account ADC or keyfile credentials
+ * Initialize Google Drive Client using Service Account ADC credentials
  */
 export function getDriveClient(): drive_v3.Drive {
   const auth = new google.auth.GoogleAuth({
@@ -104,69 +103,56 @@ export function generateSummaryCsv(payload: Record<string, any>): string {
 }
 
 /**
- * Firestore Trigger: Fires when an instrument's status transitions to 'approved'.
+ * Firestore Trigger for Records-Only Flow: Fires when a document is created in records/{recordId}
  */
-export const onInstrumentApproved = functions.firestore
-  .document('instruments/{instrumentId}')
-  .onUpdate(async (change, context) => {
-    const beforeData = change.before.data();
-    const afterData = change.after.data();
-    const instrumentId = context.params.instrumentId;
+export const onRecordCreated = functions.firestore
+  .document('records/{recordId}')
+  .onCreate(async (snapshot, context) => {
+    const recordData = snapshot.data();
+    const recordId = context.params.recordId;
 
-    // Trigger only when transitioning into 'approved' status
-    if (beforeData.status === 'approved' || afterData.status !== 'approved') {
-      return null;
-    }
-
-    console.log(`[DriveSync] Instrument ${instrumentId} approved. Initiating Google Drive pipeline...`);
+    console.log(`[RecordsSync] New record created: ${recordId}. Syncing to Google Drive...`);
 
     const drive = getDriveClient();
-    const createdAt = afterData.createdAt ? new Date(afterData.createdAt) : new Date();
+    const createdAt = recordData.createdAt ? new Date(recordData.createdAt) : new Date();
     const year = createdAt.getFullYear().toString();
-    const city = afterData.city || 'ND';
-    const userId = afterData.createdBy || 'anonymous_user';
-    
-    // Fetch user details for folder naming
-    let displayName = 'Unknown_User';
-    try {
-      const userSnap = await db.collection('users').doc(userId).get();
-      if (userSnap.exists && userSnap.data()?.displayName) {
-        displayName = userSnap.data()?.displayName;
-      }
-    } catch (e) {
-      console.warn(`[DriveSync] Could not fetch user display name for ${userId}:`, e);
-    }
-
-    const sanitizedUserFolder = `${userId}_${displayName.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
-    const instrumentType = afterData.instrumentType || 'General_Survey';
+    const city = recordData.city || 'ND';
+    const userId = recordData.userId || recordData.createdBy || 'anonymous_user';
+    const displayName = (recordData.displayName || recordData.surveyorName || 'Surveyor').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const userFolder = `${userId}_${displayName}`;
+    const instrumentType = recordData.instrumentType || 'General_Survey';
 
     try {
-      // 1. Build idempotent hierarchy: DCA/{YYYY}/{city}/{userId}_{displayName}/{instrumentType}/{instrumentId}/
+      // 1. Build hierarchy: DCA/{YYYY}/{city}/{userId}_{displayName}/{instrumentType}/{recordId}/
       const rootFolderId = ROOT_FOLDER_ID || (await getOrCreateFolder(drive, 'DCA', 'root'));
       const yearFolderId = await getOrCreateFolder(drive, year, rootFolderId);
       const cityFolderId = await getOrCreateFolder(drive, city, yearFolderId);
-      const userFolderId = await getOrCreateFolder(drive, sanitizedUserFolder, cityFolderId);
+      const userFolderId = await getOrCreateFolder(drive, userFolder, cityFolderId);
       const typeFolderId = await getOrCreateFolder(drive, instrumentType, userFolderId);
-      const targetFolderId = await getOrCreateFolder(drive, instrumentId, typeFolderId);
+      const targetFolderId = await getOrCreateFolder(drive, recordId, typeFolderId);
 
-      const drivePath = `DCA/${year}/${city}/${sanitizedUserFolder}/${instrumentType}/${instrumentId}`;
+      const drivePath = `DCA/${year}/${city}/${userFolder}/${instrumentType}/${recordId}`;
 
       // 2. Prepare file contents
-      const rawPayload = afterData.answers || afterData;
-      const jsonContent = JSON.stringify(afterData, null, 2);
-      const csvContent = generateSummaryCsv(rawPayload);
+      const jsonContent = JSON.stringify(recordData, null, 2);
+      const csvContent = generateSummaryCsv(recordData.answers || recordData);
       const checksum = crypto.createHash('sha256').update(jsonContent).digest('hex');
 
       const metadataContent = JSON.stringify(
         {
-          instrumentId,
+          recordId,
           uploadedAt: new Date().toISOString(),
-          uploadedBy: afterData.approvedBy || 'System_Master',
+          uploadedBy: recordData.surveyorEmail || userId,
           targetDriveOwner: TARGET_DRIVE_OWNER,
-          geo: afterData.geo || null,
-          geoTier: afterData.geoTier || 'strict',
+          geo: recordData.geo || {
+            lat: recordData.geoLat || 0,
+            lng: recordData.geoLng || 0,
+            accuracy: recordData.geoAccuracy || 0,
+            timestamp: recordData.geoTimestamp || Date.now(),
+          },
+          consentGiven: recordData.consentGiven || false,
+          status: recordData.status || 'completed',
           sha256Checksum: checksum,
-          qaNotes: afterData.qaNotes || '',
           version: '2.2',
         },
         null,
@@ -205,7 +191,7 @@ export const onInstrumentApproved = functions.firestore
         })
       );
 
-      // 5. Upload metadata.json for audit clarity
+      // 5. Upload metadata.json
       await withExponentialBackoff(() =>
         drive.files.create({
           requestBody: {
@@ -223,14 +209,156 @@ export const onInstrumentApproved = functions.firestore
 
       const driveFileId = jsonFile.data.id!;
 
-      // 6. Update Firestore document with drive File ID and full path
+      // 6. Update Firestore document
+      await snapshot.ref.update({
+        driveFileId,
+        drivePath,
+        pushedToDriveAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      // 7. Write audit log
+      await db.collection('drivePushLogs').add({
+        recordId,
+        pushedBy: userId,
+        pushedAt: admin.firestore.FieldValue.serverTimestamp(),
+        status: 'success',
+        driveFileId,
+        drivePath,
+        checksum,
+      });
+
+      console.log(`[RecordsSync] Successfully pushed record ${recordId} to Drive at ${drivePath}`);
+      return { success: true, driveFileId, drivePath };
+    } catch (error: any) {
+      console.error(`[RecordsSync] Failed to push record ${recordId} to Drive:`, error);
+      await db.collection('drivePushLogs').add({
+        recordId,
+        pushedBy: userId,
+        pushedAt: admin.firestore.FieldValue.serverTimestamp(),
+        status: 'failed',
+        error: error.message || String(error),
+        code: error.code || 'ERR_DRIVE_PUSH_FAILED',
+      });
+      throw error;
+    }
+  });
+
+/**
+ * Legacy Firestore Trigger for instruments/{instrumentId}
+ */
+export const onInstrumentApproved = functions.firestore
+  .document('instruments/{instrumentId}')
+  .onUpdate(async (change, context) => {
+    const beforeData = change.before.data();
+    const afterData = change.after.data();
+    const instrumentId = context.params.instrumentId;
+
+    if (beforeData.status === 'approved' || afterData.status !== 'approved') {
+      return null;
+    }
+
+    const drive = getDriveClient();
+    const createdAt = afterData.createdAt ? new Date(afterData.createdAt) : new Date();
+    const year = createdAt.getFullYear().toString();
+    const city = afterData.city || 'ND';
+    const userId = afterData.createdBy || 'anonymous_user';
+    
+    let displayName = 'Unknown_User';
+    try {
+      const userSnap = await db.collection('users').doc(userId).get();
+      if (userSnap.exists && userSnap.data()?.displayName) {
+        displayName = userSnap.data()?.displayName;
+      }
+    } catch (e) {
+      console.warn(`[DriveSync] Could not fetch user display name for ${userId}:`, e);
+    }
+
+    const sanitizedUserFolder = `${userId}_${displayName.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+    const instrumentType = afterData.instrumentType || 'General_Survey';
+
+    try {
+      const rootFolderId = ROOT_FOLDER_ID || (await getOrCreateFolder(drive, 'DCA', 'root'));
+      const yearFolderId = await getOrCreateFolder(drive, year, rootFolderId);
+      const cityFolderId = await getOrCreateFolder(drive, city, yearFolderId);
+      const userFolderId = await getOrCreateFolder(drive, sanitizedUserFolder, cityFolderId);
+      const typeFolderId = await getOrCreateFolder(drive, instrumentType, userFolderId);
+      const targetFolderId = await getOrCreateFolder(drive, instrumentId, typeFolderId);
+
+      const drivePath = `DCA/${year}/${city}/${sanitizedUserFolder}/${instrumentType}/${instrumentId}`;
+      const rawPayload = afterData.answers || afterData;
+      const jsonContent = JSON.stringify(afterData, null, 2);
+      const csvContent = generateSummaryCsv(rawPayload);
+      const checksum = crypto.createHash('sha256').update(jsonContent).digest('hex');
+
+      const metadataContent = JSON.stringify(
+        {
+          instrumentId,
+          uploadedAt: new Date().toISOString(),
+          uploadedBy: afterData.approvedBy || 'System_Master',
+          targetDriveOwner: TARGET_DRIVE_OWNER,
+          geo: afterData.geo || null,
+          geoTier: afterData.geoTier || 'strict',
+          sha256Checksum: checksum,
+          qaNotes: afterData.qaNotes || '',
+          version: '2.2',
+        },
+        null,
+        2
+      );
+
+      const jsonFile = await withExponentialBackoff(() =>
+        drive.files.create({
+          requestBody: {
+            name: 'payload.json',
+            mimeType: 'application/json',
+            parents: [targetFolderId],
+          },
+          media: {
+            mimeType: 'application/json',
+            body: jsonContent,
+          },
+          fields: 'id',
+        })
+      );
+
+      await withExponentialBackoff(() =>
+        drive.files.create({
+          requestBody: {
+            name: 'summary.csv',
+            mimeType: 'text/csv',
+            parents: [targetFolderId],
+          },
+          media: {
+            mimeType: 'text/csv',
+            body: csvContent,
+          },
+          fields: 'id',
+        })
+      );
+
+      await withExponentialBackoff(() =>
+        drive.files.create({
+          requestBody: {
+            name: 'metadata.json',
+            mimeType: 'application/json',
+            parents: [targetFolderId],
+          },
+          media: {
+            mimeType: 'application/json',
+            body: metadataContent,
+          },
+          fields: 'id',
+        })
+      );
+
+      const driveFileId = jsonFile.data.id!;
+
       await change.after.ref.update({
         driveFileId,
         drivePath,
         pushedToDriveAt: admin.firestore.FieldValue.serverTimestamp(),
       });
 
-      // 7. Write audit log to drivePushLogs
       await db.collection('drivePushLogs').add({
         instrumentId,
         pushedBy: afterData.approvedBy || userId,
@@ -241,12 +369,9 @@ export const onInstrumentApproved = functions.firestore
         checksum,
       });
 
-      console.log(`[DriveSync] Successfully pushed instrument ${instrumentId} to Google Drive at ${drivePath} (File ID: ${driveFileId})`);
       return { success: true, driveFileId, drivePath };
     } catch (error: any) {
       console.error(`[DriveSync] Failed to push instrument ${instrumentId} to Drive:`, error);
-
-      // Write error log to drivePushLogs
       await db.collection('drivePushLogs').add({
         instrumentId,
         pushedBy: afterData.approvedBy || userId,
@@ -255,7 +380,6 @@ export const onInstrumentApproved = functions.firestore
         error: error.message || String(error),
         code: error.code || 'ERR_DRIVE_PUSH_FAILED',
       });
-
       throw error;
     }
   });
