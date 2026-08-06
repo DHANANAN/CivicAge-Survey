@@ -1,0 +1,94 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    function getUserRole() {
+      return isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? getUserData().role
+        : "normal";
+    }
+    
+    function isMaster() {
+      return getUserRole() == "master";
+    }
+    
+    function isQA() {
+      return getUserRole() == "qa";
+    }
+    
+    function canPushToDrive() {
+      return isMaster() || (isQA() && getUserData().allowedPushToDrive == true);
+    }
+
+    function isValidGeo(geo) {
+      return geo != null 
+        && geo.accuracy <= 100 
+        && math.abs(request.time.toMillis() - geo.timestamp) <= 30000;
+    }
+
+    // Users Collection
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if request.auth.uid == userId || isMaster();
+    }
+
+    // Instruments Collection
+    match /instruments/{instrumentId} {
+      allow read: if isAuthenticated();
+      
+      // Normal user creation (must not directly set status = 'approved')
+      allow create: if isAuthenticated() 
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.status != "approved"
+        && (
+             request.resource.data.geoTier == "soft_warning" 
+             || isValidGeo(request.resource.data.geo)
+           );
+      
+      // Normal user update (cannot approve)
+      allow update: if isAuthenticated()
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.status != "approved"
+        && resource.data.status != "approved";
+        
+      // Approval transition: Only Master or authorized QA can transition status to 'approved'
+      allow update: if canPushToDrive() 
+        && request.resource.data.status == "approved";
+        
+      // Master can delete or archive
+      allow delete: if isMaster();
+    }
+
+    // Push Requests Collection (Normal users request QA review)
+    match /pushRequests/{requestId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() 
+        && request.resource.data.requestedBy == request.auth.uid
+        && request.resource.data.status == "open";
+      allow update: if (isQA() || isMaster()) 
+        && (request.resource.data.status == "processed" || request.resource.data.status == "rejected");
+      allow delete: if isMaster();
+    }
+
+    // Drive Push Audit Logs (Server logs)
+    match /drivePushLogs/{logId} {
+      allow read: if isMaster() || isQA();
+      allow write: if false; // Only written via Admin SDK in Cloud Functions
+    }
+
+    // Notification records
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow write: if isMaster() || isQA();
+    }
+  }
+}

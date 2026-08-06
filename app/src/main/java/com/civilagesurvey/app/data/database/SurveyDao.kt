@@ -26,6 +26,13 @@ interface SurveyDao {
     @Query("DELETE FROM surveys")
     suspend fun clearAllSurveys()
 
+    // Push Requests
+    @Query("SELECT * FROM push_requests ORDER BY requestedAt DESC")
+    fun getAllPushRequests(): Flow<List<PushRequestEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertPushRequest(request: PushRequestEntity)
+
     // User Profile
     @Query("SELECT * FROM user_profiles ORDER BY lastLoginAt DESC LIMIT 1")
     suspend fun getLastUserProfile(): UserProfileEntity?

@@ -10,13 +10,24 @@ object Config {
     val FORMS_SHARED_SECRET: String = BuildConfig.FORMS_SHARED_SECRET
     const val GOOGLE_WEB_CLIENT_ID = "777856548247-vrksj3qs9vj8fmm7up1lf22ln2dkjl5i.apps.googleusercontent.com"
 
-    const val ADMIN_ROLE = "Admin/Test Admin"
-    const val FIELD_SURVEYOR_ROLE = "Field Surveyor"
-    const val FIREBASE_PROJECT_ID_HINT = "civilage-survey"
-    const val FIREBASE_PROJECT_NUMBER_HINT = "777856548247"
+    // Role definitions
+    const val ROLE_MASTER = "master"
+    const val ROLE_QA = "qa"
+    const val ROLE_NORMAL = "normal"
+
+    // Deprecated alias compatibility
+    const val ADMIN_ROLE = ROLE_MASTER
+    const val FIELD_SURVEYOR_ROLE = ROLE_NORMAL
+
+    const val FIREBASE_PROJECT_ID_HINT = "scscdata-51bb8"
+    const val FIREBASE_PROJECT_NUMBER_HINT = "127415575414"
 
     fun roleForEmail(email: String): String {
         val cleanEmail = email.trim().lowercase()
-        return if (cleanEmail == ADMIN_EMAIL || cleanEmail == "scpdata01@gmail.com" || cleanEmail == "scscdata@gmail.com") ADMIN_ROLE else FIELD_SURVEYOR_ROLE
+        return when {
+            cleanEmail == ADMIN_EMAIL || cleanEmail == "scscdata@gmail.com" || cleanEmail == "scpdata01@gmail.com" || cleanEmail == "scscpdata@gmail.com" -> ROLE_MASTER
+            cleanEmail.contains("qa") || cleanEmail == "scscqa@gmail.com" -> ROLE_QA
+            else -> ROLE_NORMAL
+        }
     }
 }

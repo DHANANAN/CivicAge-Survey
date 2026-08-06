@@ -10,7 +10,7 @@ data class SurveyEntity(
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
     val createdBy: String = "",
-    val status: String = "", // "DRAFT" or "COMPLETED"
+    val status: String = "draft", // "draft", "pending_qa", "approved", "rejected", "pending_geo"
 
     // Consent section
     val consentGiven: Boolean = false,
@@ -38,11 +38,23 @@ data class SurveyEntity(
     val respondentPhone: String = "",
     val respondentRelation: String = "",
 
-    // Geo-Tagging
+    // Geo-Tagging & Compliance
     val latitude: Double = 0.0,
     val longitude: Double = 0.0,
     val gpsAccuracy: Float = 0f,
+    val geoTimestamp: Long = System.currentTimeMillis(),
+    val geoStatus: String = "ok", // "ok", "denied", "unavailable"
+    val geoTier: String = "strict", // "strict", "soft_warning"
     val manualLocality: String = "",
+    val city: String = "ND",
+    val instrumentType: String = "General_Survey",
+
+    // QA & Approval Workflow
+    val qaNotes: String = "",
+    val approvedBy: String = "",
+    val approvedAt: Long = 0L,
+    val driveFileId: String = "",
+    val drivePath: String = "",
 
     // Answers (Stored as JSON string mapping questionId to answerValue)
     val answersJson: String = "{}",
@@ -94,11 +106,22 @@ data class SurveyEntity(
     val surveyorName: String = "",
     val surveyorEmail: String = "",
     val surveyorPhone: String = "",
-    val surveyorRole: String = "Field Surveyor",
+    val surveyorRole: String = "normal",
     val emailReportStatus: String = "not_sent",
     val emailReportSentAt: Long = 0L,
     val jsonExportPath: String? = null,
     val transcriptExportPath: String? = null
+)
+
+@Entity(tableName = "push_requests")
+data class PushRequestEntity(
+    @PrimaryKey
+    val requestId: String,
+    val instrumentId: String,
+    val requestedBy: String,
+    val requestedAt: Long = System.currentTimeMillis(),
+    val status: String = "open", // "open", "processed", "rejected"
+    val processedBy: String = ""
 )
 
 @Entity(tableName = "user_profiles")
@@ -109,7 +132,8 @@ data class UserProfileEntity(
     val email: String,
     val surveyorId: String,
     val mobileNumber: String = "",
-    val role: String = "Field Surveyor",
+    val role: String = "normal",
+    val allowedPushToDrive: Boolean = false,
     val active: Boolean = true,
     val createdAt: Long = System.currentTimeMillis(),
     val lastLoginAt: Long = System.currentTimeMillis(),
@@ -161,4 +185,3 @@ data class GoogleFormSourceEntity(
     val supportedQuestionCount: Int = 0,
     val unsupportedQuestionCount: Int = 0
 )
-

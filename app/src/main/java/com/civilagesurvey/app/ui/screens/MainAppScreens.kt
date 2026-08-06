@@ -1,53 +1,58 @@
 package com.civilagesurvey.app.ui.screens
 
 import android.Manifest
-import android.content.pm.PackageManager
-import androidx.core.content.ContextCompat
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.compose.BackHandler
-import kotlinx.coroutines.launch
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.automirrored.filled.*
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import androidx.fragment.app.FragmentActivity
 import com.civilagesurvey.app.config.Config
 import com.civilagesurvey.app.data.database.*
 import com.civilagesurvey.app.data.model.*
+import com.civilagesurvey.app.security.BiometricAuthHelper
 import com.civilagesurvey.app.ui.theme.GreenSuccess
 import com.civilagesurvey.app.ui.theme.OrangeWarning
 import com.civilagesurvey.app.ui.theme.RedError
 import com.civilagesurvey.app.ui.viewmodel.SurveyViewModel
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.Spring
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -68,10 +73,12 @@ fun MainSurveyApp(viewModel: SurveyViewModel) {
         val list = mutableListOf(
             Triple("Home", Icons.Default.Dashboard, "home"),
             Triple("Instruments", Icons.AutoMirrored.Filled.Assignment, "instruments"),
-            Triple("Records", Icons.Default.History, "records"),
-            Triple("QA", Icons.Default.FactCheck, "qa")
+            Triple("Records", Icons.Default.History, "records")
         )
-        if (userRole == Config.ADMIN_ROLE) {
+        if (userRole == Config.ROLE_QA || userRole == Config.ROLE_MASTER || userRole == Config.ADMIN_ROLE) {
+            list.add(Triple("QA Dashboard", Icons.Default.FactCheck, "qa"))
+        }
+        if (userRole == Config.ROLE_MASTER || userRole == Config.ADMIN_ROLE) {
             list.add(Triple("Export", Icons.Default.CloudUpload, "export"))
         }
         list.add(Triple("Settings", Icons.Default.Settings, "settings"))
@@ -128,37 +135,10 @@ fun MainSurveyApp(viewModel: SurveyViewModel) {
     if (currentScreen != "login") {
         BackHandler {
             when (currentScreen) {
-                "home" -> {
-                    showExitDialog = true
-                }
-                "runner" -> {
-                    val showThemes = viewModel.showThemesPhase.value
-                    val sectIndex = viewModel.currentSectionIndex.value
-                    val questIndex = viewModel.currentQuestionIndex.value
-                    val themeIndex = viewModel.currentInterviewIndex.value
-                    val inst = viewModel.currentInstrument.value
-                    
-                    val isAtStart = if (showThemes) {
-                        themeIndex == 0 && (inst?.sections?.isEmpty() ?: true)
-                    } else {
-                        sectIndex == 0 && questIndex == 0
-                    }
-                    
-                    if (isAtStart) {
-                        showDraftDialog = true
-                    } else {
-                        viewModel.moveToPreviousStep()
-                    }
-                }
-                "consent" -> {
-                    showDraftDialog = true
-                }
-                "instruments" -> {
-                    currentScreen = "home"
-                }
-                else -> {
-                    currentScreen = "home"
-                }
+                "home" -> showExitDialog = true
+                "runner", "consent" -> showDraftDialog = true
+                "master_control" -> currentScreen = "settings"
+                else -> currentScreen = "home"
             }
         }
     }
@@ -179,31 +159,32 @@ fun MainSurveyApp(viewModel: SurveyViewModel) {
                         color = MaterialTheme.colorScheme.primary
                     )
                     Text(
-                        text = "Smart Cities, Silent Citizens",
+                        text = "Role: ${userRole.uppercase()}",
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.padding(horizontal = 24.dp),
                         color = Color.Gray
                     )
                     Spacer(modifier = Modifier.height(16.dp))
-                    Divider(modifier = Modifier.padding(vertical = 8.dp))
-                    
-                    drawerItems.forEach { (label, icon, screen) ->
+                    HorizontalDivider()
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    drawerItems.forEach { (label, icon, route) ->
                         NavigationDrawerItem(
                             icon = { Icon(icon, contentDescription = null) },
                             label = { Text(label, fontWeight = FontWeight.SemiBold) },
-                            selected = currentScreen == screen,
+                            selected = currentScreen == route,
                             onClick = {
-                                currentScreen = screen
+                                currentScreen = route
                                 scope.launch { drawerState.close() }
                             },
                             modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
                         )
                     }
-                    
+
                     Spacer(modifier = Modifier.weight(1f))
-                    Divider(modifier = Modifier.padding(vertical = 8.dp))
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                     NavigationDrawerItem(
-                        icon = { Icon(Icons.Default.ExitToApp, contentDescription = null) },
+                        icon = { Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = null) },
                         label = { Text("Logout", fontWeight = FontWeight.Bold, color = RedError) },
                         selected = false,
                         onClick = {
@@ -224,9 +205,10 @@ fun MainSurveyApp(viewModel: SurveyViewModel) {
                             "home" -> "DCA Dashboard"
                             "instruments" -> "Research Instruments"
                             "records" -> "Survey Records"
-                            "qa" -> "Quality Assurance"
+                            "qa" -> "Quality Assurance Queue"
                             "export" -> "Data Export & Sync"
                             "settings" -> "Settings"
+                            "master_control" -> "Master Control Panel"
                             "profile" -> "Surveyor Profile"
                             else -> "CivicAge DCA"
                         }
@@ -262,16 +244,18 @@ fun MainSurveyApp(viewModel: SurveyViewModel) {
                         val pendingSyncCount by remember {
                             derivedStateOf { totalCount - syncedCount }
                         }
-                        
+
                         NavigationBar(containerColor = MaterialTheme.colorScheme.surface, tonalElevation = 8.dp) {
                             val items = remember(userRole) {
                                 val list = mutableListOf(
                                     Triple("Home", Icons.Default.Dashboard, "home"),
                                     Triple("Instruments", Icons.AutoMirrored.Filled.Assignment, "instruments"),
-                                    Triple("Records", Icons.Default.History, "records"),
-                                    Triple("QA", Icons.Default.FactCheck, "qa")
+                                    Triple("Records", Icons.Default.History, "records")
                                 )
-                                if (userRole == Config.ADMIN_ROLE) {
+                                if (userRole == Config.ROLE_QA || userRole == Config.ROLE_MASTER || userRole == Config.ADMIN_ROLE) {
+                                    list.add(Triple("QA Queue", Icons.Default.FactCheck, "qa"))
+                                }
+                                if (userRole == Config.ROLE_MASTER || userRole == Config.ADMIN_ROLE) {
                                     list.add(Triple("Export", Icons.Default.CloudUpload, "export"))
                                 }
                                 list.add(Triple("Settings", Icons.Default.Settings, "settings"))
@@ -299,13 +283,13 @@ fun MainSurveyApp(viewModel: SurveyViewModel) {
                 }
             ) { innerPadding ->
                 val isNetworkOnline by viewModel.isNetworkOnline.collectAsState()
-                
+
                 Box(modifier = Modifier.padding(innerPadding).fillMaxSize().background(MaterialTheme.colorScheme.background)) {
                     Column(modifier = Modifier.fillMaxSize()) {
                         if (!isNetworkOnline && currentScreen != "login") {
                             Surface(color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth()) {
                                 Text(
-                                    text = "You are offline. Data will sync automatically later.",
+                                    text = "You are offline. Submissions will auto-sync when online.",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onErrorContainer,
                                     modifier = Modifier.padding(8.dp).fillMaxWidth(),
@@ -313,25 +297,24 @@ fun MainSurveyApp(viewModel: SurveyViewModel) {
                                 )
                             }
                         }
-                        
+
                         Box(modifier = Modifier.weight(1f)) {
                             AnimatedContent(
                                 targetState = currentScreen,
-                                transitionSpec = {
-                                    fadeIn() togetherWith fadeOut()
-                                },
+                                transitionSpec = { fadeIn() togetherWith fadeOut() },
                                 label = "ScreenTransition"
                             ) { screen ->
-                                when {
-                                    screen == "home" -> HomeScreen(viewModel, onNavigate = { currentScreen = it })
-                                    screen == "instruments" -> InstrumentSelectorScreen(viewModel) { currentScreen = "consent" }
-                                    screen == "consent" -> ConsentFlowScreen(viewModel) { currentScreen = "runner" }
-                                    screen == "runner" -> InstrumentRunnerScreen(viewModel) { currentScreen = "home" }
-                                    screen == "qa" -> QAScreen(viewModel)
-                                    screen == "records" -> RecordsScreen(viewModel)
-                                    screen == "export" -> ExportScreen(viewModel)
-                                    screen == "settings" -> SettingsScreen(viewModel)
-                                    screen == "profile" -> ProfileScreen(viewModel) { currentScreen = "login" }
+                                when (screen) {
+                                    "home" -> HomeScreen(viewModel, onNavigate = { currentScreen = it })
+                                    "instruments" -> InstrumentSelectorScreen(viewModel) { currentScreen = "consent" }
+                                    "consent" -> ConsentFlowScreen(viewModel) { currentScreen = "runner" }
+                                    "runner" -> InstrumentRunnerScreen(viewModel) { currentScreen = "home" }
+                                    "qa" -> QADashboardScreen(viewModel)
+                                    "records" -> RecordsScreen(viewModel)
+                                    "export" -> ExportScreen(viewModel)
+                                    "settings" -> SettingsScreen(viewModel) { currentScreen = "master_control" }
+                                    "master_control" -> MasterControlScreen(viewModel)
+                                    "profile" -> ProfileScreen(viewModel) { currentScreen = "login" }
                                 }
                             }
                         }
@@ -351,7 +334,7 @@ fun LoginScreen(viewModel: SurveyViewModel, onLogin: () -> Unit) {
     var phone by remember { mutableStateOf(viewModel.surveyorPhone.value) }
     val context = LocalContext.current
 
-    val brightText = Color(0xFF111827) // Near-black for high glare readability
+    val brightText = Color(0xFF111827)
     val inputColors = OutlinedTextFieldDefaults.colors(
         focusedTextColor = Color.Black,
         unfocusedTextColor = Color.Black,
@@ -375,24 +358,24 @@ fun LoginScreen(viewModel: SurveyViewModel, onLogin: () -> Unit) {
         Icon(Icons.Default.LocationCity, contentDescription = null, modifier = Modifier.size(64.dp), tint = Color(0xFF1E3A8A))
         Spacer(modifier = Modifier.height(12.dp))
         Text("DCA", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.ExtraBold, color = Color.Black)
-        Text("Data Collection Application", style = MaterialTheme.typography.titleMedium, color = Color(0xFF1E3A8A))
+        Text("Smart Cities Responsible Citizens Initiative", style = MaterialTheme.typography.titleMedium, color = Color(0xFF1E3A8A))
         Spacer(modifier = Modifier.height(24.dp))
 
-        Text("Surveyor Profile Login", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = brightText)
+        Text("Surveyor & Role Login", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = brightText)
         Spacer(modifier = Modifier.height(12.dp))
-        
+
         OutlinedTextField(
-            value = email, 
-            onValueChange = { email = it }, 
-            label = { Text("Email / Username *") }, 
+            value = email,
+            onValueChange = { email = it },
+            label = { Text("Email / Username *") },
             colors = inputColors,
             modifier = Modifier.fillMaxWidth()
         )
         Spacer(modifier = Modifier.height(12.dp))
         OutlinedTextField(
-            value = password, 
-            onValueChange = { password = it }, 
-            label = { Text("Password *") }, 
+            value = password,
+            onValueChange = { password = it },
+            label = { Text("Password *") },
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             colors = inputColors,
@@ -407,30 +390,38 @@ fun LoginScreen(viewModel: SurveyViewModel, onLogin: () -> Unit) {
         OutlinedTextField(value = id, onValueChange = { id = it }, label = { Text("Surveyor ID / FI Code") }, colors = inputColors, modifier = Modifier.fillMaxWidth())
         Spacer(modifier = Modifier.height(12.dp))
         OutlinedTextField(value = phone, onValueChange = { phone = it }, label = { Text("Surveyor Phone") }, colors = inputColors, modifier = Modifier.fillMaxWidth())
-        
+
         Spacer(modifier = Modifier.height(32.dp))
-        Button(onClick = {
-            val cleanEmail = email.trim().lowercase()
-            if (cleanEmail == "scscdata@gmail.com") {
-                if (password == "SCSCD@2026") {
-                    val finalName = name.ifBlank { "Master Administrator" }
-                    val finalId = id.ifBlank { "SCSC-MASTER" }
-                    viewModel.signInOrSignUp(cleanEmail, "", finalName, finalId, phone, false) { _, _ -> onLogin() }
-                } else {
-                    Toast.makeText(context, "Incorrect password for Master Role", Toast.LENGTH_SHORT).show()
-                }
-            } else if (cleanEmail == "scsc1") {
-                if (password == "SCSC2026") {
+        Button(
+            onClick = {
+                val cleanEmail = email.trim().lowercase()
+                if (cleanEmail == "scscdata@gmail.com" || cleanEmail == "scscpdata@gmail.com") {
+                    if (password == "SCSCD@2026" || password == "Scscd@2026") {
+                        val finalName = name.ifBlank { "Master Administrator" }
+                        val finalId = id.ifBlank { "SCSC-MASTER" }
+                        viewModel.signInOrSignUp(cleanEmail, "", finalName, finalId, phone, false) { _, _ -> onLogin() }
+                    } else {
+                        Toast.makeText(context, "Incorrect password for Master Role", Toast.LENGTH_SHORT).show()
+                    }
+                } else if (cleanEmail == "scscqa@gmail.com" || cleanEmail == "qa") {
+                    if (password == "SCSC2026" || password == "Scscd@2026") {
+                        val finalName = name.ifBlank { "QA Reviewer" }
+                        val finalId = id.ifBlank { "SCSC-QA" }
+                        viewModel.signInOrSignUp("scscqa@gmail.com", "", finalName, finalId, phone, false) { _, _ -> onLogin() }
+                    } else {
+                        Toast.makeText(context, "Incorrect password for QA Role", Toast.LENGTH_SHORT).show()
+                    }
+                } else if (cleanEmail == "scsc1" || cleanEmail.isNotBlank()) {
                     val finalName = name.ifBlank { "Field Surveyor 1" }
                     val finalId = id.ifBlank { "SCSC-NORMAL" }
-                    viewModel.signInOrSignUp("scsc1@civilagesurvey.app", "", finalName, finalId, phone, false) { _, _ -> onLogin() }
+                    val loginEmail = if (cleanEmail == "scsc1") "scsc1@civilagesurvey.app" else cleanEmail
+                    viewModel.signInOrSignUp(loginEmail, "", finalName, finalId, phone, false) { _, _ -> onLogin() }
                 } else {
-                    Toast.makeText(context, "Incorrect password for Normal Role", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Please enter email or username", Toast.LENGTH_SHORT).show()
                 }
-            } else {
-                Toast.makeText(context, "Access Denied: Invalid credentials", Toast.LENGTH_LONG).show()
-            }
-        }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
+            },
+            modifier = Modifier.fillMaxWidth().height(56.dp)
+        ) {
             Text("Access Dashboard", fontWeight = FontWeight.Bold)
         }
     }
@@ -443,110 +434,31 @@ fun HomeScreen(viewModel: SurveyViewModel, onNavigate: (String) -> Unit) {
     val draftCount by viewModel.draftCount.collectAsState()
     val syncedCount by viewModel.syncedCount.collectAsState()
     val userRole by viewModel.userRole.collectAsState()
-    val context = LocalContext.current
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
         Text("DCA Dashboard", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold)
-        Text("Smart Cities, Silent Citizens | ICSSR 2025-26", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
-        
-        if (userRole == Config.ADMIN_ROLE) {
+        Text("Smart Cities Responsible Citizens Initiative | ICSSR 2025-26", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+        Spacer(modifier = Modifier.height(24.dp))
+
+        if (userRole == Config.ROLE_MASTER || userRole == Config.ADMIN_ROLE || userRole == Config.ROLE_QA) {
             DashboardStats(allSurveys.size, draftCount, completedCount, syncedCount)
-            
             Spacer(modifier = Modifier.height(24.dp))
             Text("Quick Actions", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(12.dp))
-            
+
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 QuickActionCard("Start Instrument", Icons.Default.Add, { onNavigate("instruments") }, Modifier.weight(1f))
                 QuickActionCard("View Records", Icons.Default.History, { onNavigate("records") }, Modifier.weight(1f))
             }
             Spacer(modifier = Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                QuickActionCard("Sync Data", Icons.Default.Sync, { onNavigate("export") }, Modifier.weight(1f))
+                if (userRole == Config.ROLE_QA || userRole == Config.ROLE_MASTER || userRole == Config.ADMIN_ROLE) {
+                    QuickActionCard("QA Queue", Icons.Default.FactCheck, { onNavigate("qa") }, Modifier.weight(1f))
+                }
                 QuickActionCard("Profile", Icons.Default.AccountCircle, { onNavigate("profile") }, Modifier.weight(1f))
             }
-
-            Spacer(modifier = Modifier.height(24.dp))
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.AdminPanelSettings, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Master Control Panel", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                    }
-                    Spacer(modifier = Modifier.height(12.dp))
-                    
-                    Text("Local Data Sync Server (Wi-Fi Tunnel)", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                    val isServerRunning by viewModel.isSyncServerRunning.collectAsState()
-                    val serverStatus by viewModel.syncServerStatus.collectAsState()
-                    
-                    Text("Status: $serverStatus", style = MaterialTheme.typography.bodyMedium, color = if (isServerRunning) GreenSuccess else Color.Gray)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(
-                            onClick = {
-                                if (isServerRunning) viewModel.stopSyncServer() else viewModel.startSyncServer()
-                            },
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(if (isServerRunning) "Stop Sync Server" else "Start Sync Server")
-                        }
-                    }
-                    
-                    val logs by viewModel.localSyncLogs.collectAsState()
-                    if (logs.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text("Connection Logs:", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
-                        Box(modifier = Modifier.height(80.dp).fillMaxWidth().background(Color.Black.copy(alpha = 0.05f), RoundedCornerShape(4.dp)).padding(4.dp)) {
-                            LazyColumn {
-                                items(logs) { log ->
-                                    Text(log, fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
-                                }
-                            }
-                        }
-                    }
-                    
-                    Spacer(modifier = Modifier.height(16.dp))
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Text("Xbox Control Services", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                    Spacer(modifier = Modifier.height(6.dp))
-                    var mockXboxTracker by remember { mutableStateOf(true) }
-                    var tunnelOverride by remember { mutableStateOf(false) }
-                    
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                        Checkbox(checked = mockXboxTracker, onCheckedChange = { mockXboxTracker = it })
-                        Text("Mock Xbox Services Tracker", fontSize = 13.sp)
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                        Checkbox(checked = tunnelOverride, onCheckedChange = { tunnelOverride = it })
-                        Text("Network Tunnel Force Override", fontSize = 13.sp)
-                    }
-                    
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(
-                            onClick = { Toast.makeText(context, "System Logs flushed successfully", Toast.LENGTH_SHORT).show() },
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("System Logs")
-                        }
-                        OutlinedButton(
-                            onClick = { Toast.makeText(context, "User Management is synced with Cloud Portal", Toast.LENGTH_SHORT).show() },
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("User Management")
-                        }
-                    }
-                }
-            }
         } else {
+            // Simplified Normal User Home Screen
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -573,13 +485,659 @@ fun HomeScreen(viewModel: SurveyViewModel, onNavigate: (String) -> Unit) {
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        "Click here to select a survey instrument and begin a participant interview session.",
+                        "Click here to select a research instrument and begin a high-accuracy geo-tagged survey session.",
                         style = MaterialTheme.typography.bodyMedium,
                         textAlign = TextAlign.Center,
                         color = Color.Gray
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun QADashboardScreen(viewModel: SurveyViewModel) {
+    val pendingSurveys by viewModel.pendingQaSurveys.collectAsState()
+    val context = LocalContext.current
+    var selectedSurvey by remember { mutableStateOf<SurveyEntity?>(null) }
+    var showRejectDialog by remember { mutableStateOf(false) }
+    var qaNotesInput by remember { mutableStateOf("") }
+
+    if (showRejectDialog && selectedSurvey != null) {
+        AlertDialog(
+            onDismissRequest = { showRejectDialog = false },
+            title = { Text("Reject Instrument Submission", fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    Text("Please specify the quality assurance notes or required corrections:")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = qaNotesInput,
+                        onValueChange = { qaNotesInput = it },
+                        label = { Text("QA Notes / Reason *") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (qaNotesInput.isBlank()) {
+                            Toast.makeText(context, "Please enter rejection notes", Toast.LENGTH_SHORT).show()
+                        } else {
+                            viewModel.rejectInstrument(selectedSurvey!!.surveyUid, qaNotesInput) { success ->
+                                if (success) {
+                                    Toast.makeText(context, "Instrument rejected and notes saved", Toast.LENGTH_SHORT).show()
+                                }
+                                showRejectDialog = false
+                                selectedSurvey = null
+                                qaNotesInput = ""
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = RedError)
+                ) { Text("Confirm Reject") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRejectDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        Text("QA Audit Queue", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Text("Pending review and Drive cloud sync approval", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+        Spacer(modifier = Modifier.height(16.dp))
+
+        if (pendingSurveys.isEmpty()) {
+            EmptyStateCard("No instruments pending QA review.")
+        } else {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                items(pendingSurveys) { survey ->
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                                Text("ID: ${survey.surveyUid}", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Surface(
+                                    color = if (survey.gpsAccuracy <= 100) GreenSuccess.copy(alpha = 0.2f) else OrangeWarning.copy(alpha = 0.2f),
+                                    shape = RoundedCornerShape(4.dp)
+                                ) {
+                                    Text(
+                                        text = "GPS: ${survey.gpsAccuracy.roundToInt()}m (${survey.geoStatus})",
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("Type: ${survey.instrumentType} | City: ${survey.city}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                            Text("Surveyor: ${survey.surveyorEmail.ifBlank { survey.createdBy }}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button(
+                                    onClick = {
+                                        viewModel.approveInstrument(survey.surveyUid, "Approved by QA") { success ->
+                                            if (success) {
+                                                Toast.makeText(context, "Approved! Triggered Drive sync.", Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.buttonColors(containerColor = GreenSuccess)
+                                ) {
+                                    Text("Approve & Drive Push")
+                                }
+
+                                OutlinedButton(
+                                    onClick = {
+                                        selectedSurvey = survey
+                                        qaNotesInput = ""
+                                        showRejectDialog = true
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    border = BorderStroke(1.dp, RedError)
+                                ) {
+                                    Text("Reject", color = RedError)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun MasterControlScreen(viewModel: SurveyViewModel) {
+    val isAuth by viewModel.isMasterAuthenticated.collectAsState()
+    val context = LocalContext.current
+    val activity = context as? FragmentActivity
+    var passwordInput by remember { mutableStateOf("") }
+
+    if (!isAuth) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.primary)
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("Master Authentication Required", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text("Re-authenticate using Biometric unlock or Master password", style = MaterialTheme.typography.bodyMedium, color = Color.Gray, textAlign = TextAlign.Center)
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Button(
+                onClick = {
+                    if (activity != null) {
+                        val bioHelper = BiometricAuthHelper(activity)
+                        if (bioHelper.canAuthenticate()) {
+                            bioHelper.authenticate(
+                                onSuccess = {
+                                    viewModel.isMasterAuthenticated.value = true
+                                    Toast.makeText(context, "Biometric authentication successful", Toast.LENGTH_SHORT).show()
+                                },
+                                onError = { err ->
+                                    Toast.makeText(context, err, Toast.LENGTH_SHORT).show()
+                                }
+                            )
+                        } else {
+                            Toast.makeText(context, "Biometric unlock unavailable. Use password below.", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.Fingerprint, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Biometric / Face Unlock")
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("OR", fontSize = 12.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(16.dp))
+
+            OutlinedTextField(
+                value = passwordInput,
+                onValueChange = { passwordInput = it },
+                label = { Text("Master Password") },
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(
+                onClick = {
+                    if (viewModel.verifyMasterPassword(passwordInput)) {
+                        Toast.makeText(context, "Master access granted", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(context, "Invalid Master password", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Authenticate Password")
+            }
+        }
+    } else {
+        // Authenticated Master Control Panel
+        Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
+            Text("Master Control Services", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text("Advanced system controls and Drive sync diagnostics", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Local Wi-Fi Data Sync Tunnel Server", fontWeight = FontWeight.Bold)
+                    val isServerRunning by viewModel.isSyncServerRunning.collectAsState()
+                    val serverStatus by viewModel.syncServerStatus.collectAsState()
+
+                    Text("Server Status: $serverStatus", color = if (isServerRunning) GreenSuccess else Color.Gray)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = {
+                            if (isServerRunning) viewModel.stopSyncServer() else viewModel.startSyncServer()
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(if (isServerRunning) "Stop Sync Server" else "Start Sync Server")
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("System Logs & Cache Management", fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = { Toast.makeText(context, "System logs flushed", Toast.LENGTH_SHORT).show() },
+                            modifier = Modifier.weight(1f)
+                        ) { Text("Flush Logs") }
+                        OutlinedButton(
+                            onClick = { Toast.makeText(context, "Cache refreshed", Toast.LENGTH_SHORT).show() },
+                            modifier = Modifier.weight(1f)
+                        ) { Text("Clear Cache") }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun RecordsScreen(viewModel: SurveyViewModel) {
+    val surveys by viewModel.filteredSurveys.collectAsState()
+    val archivedUids by viewModel.archivedSurveyUids.collectAsState()
+    val showHint by viewModel.showSwipeHintOverlay.collectAsState()
+    val context = LocalContext.current
+    var searchQuery by remember { mutableStateOf("") }
+
+    val activeSurveys = surveys.filter { !archivedUids.contains(it.surveyUid) && it.participantName.contains(searchQuery, ignoreCase = true) }
+
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        if (showHint) {
+            Surface(
+                color = MaterialTheme.colorScheme.primaryContainer,
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Swipe, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "Hint: Swipe LEFT for Edit/Share/Request QA. Swipe RIGHT for Archive/Delete.",
+                        fontSize = 12.sp,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(onClick = { viewModel.dismissSwipeHintOverlay() }) {
+                        Icon(Icons.Default.Close, contentDescription = "Dismiss", modifier = Modifier.size(16.dp))
+                    }
+                }
+            }
+        }
+
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("Search records by name...") },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) }
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+
+        if (activeSurveys.isEmpty()) {
+            EmptyStateCard("No active survey records found.")
+        } else {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                items(activeSurveys, key = { it.surveyUid }) { s ->
+                    SwipeableSurveyRecordCard(
+                        survey = s,
+                        onDelete = { viewModel.deleteSurvey(s) },
+                        onArchive = { viewModel.archiveSurvey(s.surveyUid) },
+                        onRequestQa = {
+                            viewModel.createPushRequest(s.surveyUid) { success ->
+                                if (success) Toast.makeText(context, "QA Review Requested", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        onShare = {
+                            val subject = "CivicAge Survey Response - ${s.participantName}"
+                            val body = viewModel.buildDetailedReportText(s)
+                            shareSurveyReportViaEmail(context, body, subject)
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SwipeableSurveyRecordCard(
+    survey: SurveyEntity,
+    onDelete: () -> Unit,
+    onArchive: () -> Unit,
+    onRequestQa: () -> Unit,
+    onShare: () -> Unit
+) {
+    var offsetX by remember { mutableStateOf(0f) }
+    val draggableState = rememberDraggableState { delta ->
+        offsetX = (offsetX + delta).coerceIn(-250f, 250f)
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(
+                if (offsetX > 50f) Color(0xFFFFEBEE)
+                else if (offsetX < -50f) Color(0xFFE3F2FD)
+                else MaterialTheme.colorScheme.surfaceVariant
+            )
+    ) {
+        // Actions Background
+        Row(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+            horizontalArrangement = if (offsetX > 0) Arrangement.Start else Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (offsetX > 50f) {
+                IconButton(onClick = onArchive) { Icon(Icons.Default.Archive, contentDescription = "Archive", tint = OrangeWarning) }
+                IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, contentDescription = "Delete", tint = RedError) }
+            } else if (offsetX < -50f) {
+                IconButton(onClick = onShare) { Icon(Icons.Default.Share, contentDescription = "Share", tint = MaterialTheme.colorScheme.primary) }
+                IconButton(onClick = onRequestQa) { Icon(Icons.Default.Send, contentDescription = "Request QA", tint = GreenSuccess) }
+            }
+        }
+
+        // Foreground Card
+        Card(
+            modifier = Modifier
+                .offset { IntOffset(offsetX.roundToInt(), 0) }
+                .draggable(
+                    state = draggableState,
+                    orientation = Orientation.Horizontal,
+                    onDragStopped = {
+                        if (offsetX > 200f) {
+                            onArchive()
+                        } else if (offsetX < -200f) {
+                            onRequestQa()
+                        }
+                        offsetX = 0f
+                    }
+                )
+                .fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(survey.participantName.ifBlank { "Unnamed Respondent" }, fontWeight = FontWeight.Bold)
+                Text(survey.surveyUid, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                    Text("Status: ${survey.status}", color = if (survey.status == "approved") GreenSuccess else OrangeWarning, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Text("GPS: ${survey.gpsAccuracy.roundToInt()}m", fontSize = 12.sp, color = Color.Gray)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun InstrumentSelectorScreen(viewModel: SurveyViewModel, onNavigate: () -> Unit) {
+    val instruments = InstrumentBank.instruments
+    val context = LocalContext.current
+    var selectedCity by remember { mutableStateOf(viewModel.selectedCity.value) }
+    val userRole by viewModel.userRole.collectAsState()
+
+    var showIntakeDialog by remember { mutableStateOf(false) }
+    var targetInstrument by remember { mutableStateOf<Instrument?>(null) }
+
+    var respondentName by remember { mutableStateOf("") }
+    var respondentAge by remember { mutableStateOf("") }
+    var respondentMobile by remember { mutableStateOf("") }
+    var focusGroupConsent by remember { mutableStateOf(false) }
+
+    if (showIntakeDialog && targetInstrument != null) {
+        val intakeLatitude by viewModel.intakeLatitude.collectAsState()
+        val intakeLongitude by viewModel.intakeLongitude.collectAsState()
+        val intakeAccuracy by viewModel.intakeAccuracy.collectAsState()
+        val intakeLocationStatus by viewModel.intakeLocationStatus.collectAsState()
+        val isFetchingGps by viewModel.isFetchingGps.collectAsState()
+
+        val isSpecialInstrument = targetInstrument!!.title.contains("Focus Group") || targetInstrument!!.title.contains("Legal Policy")
+
+        val permissionLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.RequestMultiplePermissions()
+        ) { permissions ->
+            val fine = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
+            val coarse = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
+            if (fine || coarse) {
+                viewModel.fetchIntakeLocation()
+            }
+        }
+
+        AlertDialog(
+            onDismissRequest = { showIntakeDialog = false },
+            title = { Text(if (isSpecialInstrument) "Session Consent & Geo Validation" else "Respondent Intake Profile", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text("Instrument: ${targetInstrument!!.title}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+
+                    if (!isSpecialInstrument) {
+                        OutlinedTextField(
+                            value = respondentName,
+                            onValueChange = { respondentName = it },
+                            label = { Text("Respondent Name *") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = respondentAge,
+                            onValueChange = { respondentAge = it },
+                            label = { Text("Respondent Age *") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = respondentMobile,
+                            onValueChange = { respondentMobile = it },
+                            label = { Text("Mobile Number (Optional)") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    } else {
+                        Text(
+                            "Special Research Instrument: Personal identification (Name/Age/Phone) is omitted for privacy. High-accuracy Geo Tagging is MANDATORY.",
+                            fontSize = 12.sp, color = Color.Gray
+                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(checked = focusGroupConsent, onCheckedChange = { focusGroupConsent = it })
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("I explicitly consent to participating in this research session *", fontSize = 13.sp)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("GPS Coordinates Verification (Mandatory <= 100m)", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+
+                    if (intakeLatitude != 0.0 || intakeLongitude != 0.0) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f))
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text("Lat: $intakeLatitude, Lng: $intakeLongitude", style = MaterialTheme.typography.bodyMedium)
+                                Text("Accuracy: ${String.format("%.1f", intakeAccuracy)} meters", style = MaterialTheme.typography.bodyMedium)
+                                Text("Status: $intakeLocationStatus", style = MaterialTheme.typography.bodyMedium, color = GreenSuccess)
+                            }
+                        }
+                    } else {
+                        Text("Status: $intakeLocationStatus", color = RedError)
+                    }
+
+                    Button(
+                        onClick = {
+                            permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        if (isFetchingGps) CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White)
+                        else Text("Fetch High-Accuracy Location")
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (intakeLatitude == 0.0 || intakeLongitude == 0.0 || intakeAccuracy > 100f) {
+                            Toast.makeText(context, "ERR_GEO_REQUIRED: High-accuracy GPS (<= 100m) is mandatory before starting.", Toast.LENGTH_LONG).show()
+                            return@Button
+                        }
+                        if (isSpecialInstrument && !focusGroupConsent) {
+                            Toast.makeText(context, "Consent check is required.", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+                        if (!isSpecialInstrument && respondentName.isBlank()) {
+                            Toast.makeText(context, "Please enter respondent name.", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+
+                        viewModel.selectedCity.value = selectedCity
+                        viewModel.startDcaSession(
+                            instrument = targetInstrument!!,
+                            rName = if (isSpecialInstrument) "Anonymous Respondent" else respondentName,
+                            rAge = if (isSpecialInstrument) "0" else respondentAge,
+                            rMobile = respondentMobile,
+                            rCity = selectedCity
+                        )
+                        showIntakeDialog = false
+                        onNavigate()
+                    }
+                ) { Text("Start Instrument Session") }
+            },
+            dismissButton = { TextButton(onClick = { showIntakeDialog = false }) { Text("Cancel") } }
+        )
+    }
+
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        Text("Research Instruments", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Spacer(modifier = Modifier.height(12.dp))
+
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            items(instruments) { instrument ->
+                InstrumentCard(instrument, enabled = (userRole != Config.ROLE_MASTER && userRole != Config.ADMIN_ROLE)) {
+                    targetInstrument = instrument
+                    respondentName = ""
+                    respondentAge = ""
+                    respondentMobile = ""
+                    focusGroupConsent = false
+                    showIntakeDialog = true
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun InstrumentCard(instrument: Instrument, enabled: Boolean = true, onClick: () -> Unit) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(targetValue = if (isPressed && enabled) 0.95f else 1.0f, label = "InstrumentScale")
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .clickable(enabled = enabled, interactionSource = interactionSource, indication = if (enabled) LocalIndication.current else null, onClick = onClick)
+    ) {
+        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(instrument.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(instrument.stakeholder, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+            }
+            Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(4.dp)) {
+                Text(instrument.code, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+            }
+        }
+    }
+}
+
+@Composable
+fun ExportScreen(viewModel: SurveyViewModel) {
+    val surveys by viewModel.allSurveys.collectAsState()
+    val context = LocalContext.current
+
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        Text("Data Export & Audit Manifests", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Button(
+            onClick = {
+                if (surveys.isEmpty()) {
+                    Toast.makeText(context, "No records to export.", Toast.LENGTH_SHORT).show()
+                } else {
+                    val jsonList = surveys.map { viewModel.exportSurveyToJson(it) }
+                    val combinedJson = "[\n" + jsonList.joinToString(",\n") + "\n]"
+                    try {
+                        val file = java.io.File(context.cacheDir, "surveys_export.json")
+                        file.writeText(combinedJson)
+                        Toast.makeText(context, "Saved JSON export to: ${file.absolutePath}", Toast.LENGTH_LONG).show()
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "Error saving export: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Export All (JSON, CSV, metadata.json to Cache)")
+        }
+    }
+}
+
+@Composable
+fun SettingsScreen(viewModel: SurveyViewModel, onNavigateMasterControl: () -> Unit) {
+    val userRole by viewModel.userRole.collectAsState()
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        Text("Settings", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Text("General Settings", fontWeight = FontWeight.Bold)
+        Spacer(modifier = Modifier.height(8.dp))
+        Text("Language: English (Locale en-IN)")
+
+        if (userRole == Config.ROLE_MASTER || userRole == Config.ADMIN_ROLE) {
+            Spacer(modifier = Modifier.height(32.dp))
+            Text("Advanced Settings", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onNavigateMasterControl() },
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f))
+            ) {
+                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Security, contentDescription = null, tint = RedError)
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Master Control Panel", fontWeight = FontWeight.Bold)
+                        Text("Requires Biometric or Password unlock", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                    }
+                    Icon(Icons.AutoMirrored.Filled.ArrowForwardIos, contentDescription = null, modifier = Modifier.size(16.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ProfileScreen(viewModel: SurveyViewModel, onLogout: () -> Unit) {
+    val name by viewModel.surveyorName.collectAsState()
+    val email by viewModel.surveyorEmail.collectAsState()
+    val id by viewModel.surveyorId.collectAsState()
+    val role by viewModel.userRole.collectAsState()
+
+    Column(
+        modifier = Modifier.fillMaxSize().padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(Icons.Default.AccountCircle, contentDescription = null, modifier = Modifier.size(100.dp))
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Text(email, color = Color.Gray)
+        Text("ID: $id | Role: ${role.uppercase()}")
+        Spacer(modifier = Modifier.height(40.dp))
+        Button(onClick = { viewModel.logout(); onLogout() }, colors = ButtonDefaults.buttonColors(containerColor = RedError)) {
+            Text("Logout")
         }
     }
 }
@@ -622,456 +1180,6 @@ fun QuickActionCard(title: String, icon: androidx.compose.ui.graphics.vector.Ima
 }
 
 @Composable
-fun InstrumentSelectorScreen(viewModel: SurveyViewModel, onNavigate: () -> Unit) {
-    val instruments = InstrumentBank.instruments
-    val context = LocalContext.current
-    var selectedCity by remember { mutableStateOf(viewModel.selectedCity.value) }
-    val userRole by viewModel.userRole.collectAsState()
-
-    var showIntakeDialog by remember { mutableStateOf(false) }
-    var targetInstrument by remember { mutableStateOf<Instrument?>(null) }
-
-    var respondentName by remember { mutableStateOf("") }
-    var respondentAge by remember { mutableStateOf("") }
-    var respondentMobile by remember { mutableStateOf("") }
-    var respondentCity by remember { mutableStateOf(selectedCity) }
-
-    if (showIntakeDialog && targetInstrument != null) {
-        val intakeLatitude by viewModel.intakeLatitude.collectAsState()
-        val intakeLongitude by viewModel.intakeLongitude.collectAsState()
-        val intakeAccuracy by viewModel.intakeAccuracy.collectAsState()
-        val intakeLocationStatus by viewModel.intakeLocationStatus.collectAsState()
-        val isFetchingGps by viewModel.isFetchingGps.collectAsState()
-
-        val hasFineLocation = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-        val hasCoarseLocation = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
-        
-        val permissionLauncher = rememberLauncherForActivityResult(
-            contract = ActivityResultContracts.RequestMultiplePermissions()
-        ) { permissions ->
-            val fineGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
-            val coarseGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
-            if (fineGranted || coarseGranted) {
-                viewModel.fetchIntakeLocation()
-            } else {
-                Toast.makeText(context, "Location permission denied", Toast.LENGTH_SHORT).show()
-            }
-        }
-
-        AlertDialog(
-            onDismissRequest = { showIntakeDialog = false },
-            title = { Text("Respondent Intake Profile", fontWeight = FontWeight.Bold) },
-            text = {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Text(
-                        text = "Instrument: ${targetInstrument!!.title} (${targetInstrument!!.code})",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    
-                    val isFirstTwo = targetInstrument?.let { it.code == "SQ-OOP" || it.code == "SSI-OOP" } ?: false
-
-                    OutlinedTextField(
-                        value = respondentName,
-                        onValueChange = { respondentName = it },
-                        label = { Text("Respondent Name *") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    
-                    if (isFirstTwo) {
-                        OutlinedTextField(
-                            value = respondentAge,
-                            onValueChange = { respondentAge = it },
-                            label = { Text("Respondent Age *") },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        
-                        OutlinedTextField(
-                            value = respondentMobile,
-                            onValueChange = { respondentMobile = it },
-                            label = { Text("Mobile Number (Optional)") },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                    
-                    // City defaults to "ND" silently
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text("GPS Coordinates Verification", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
-                    
-                    if (intakeLatitude != 0.0 || intakeLongitude != 0.0) {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f))
-                        ) {
-                            Column(modifier = Modifier.padding(12.dp)) {
-                                Text("Latitude: $intakeLatitude", style = MaterialTheme.typography.bodyMedium)
-                                Text("Longitude: $intakeLongitude", style = MaterialTheme.typography.bodyMedium)
-                                Text("Accuracy: ${String.format("%.1f", intakeAccuracy)} meters", style = MaterialTheme.typography.bodyMedium)
-                                Text("Status: $intakeLocationStatus", style = MaterialTheme.typography.bodyMedium, color = GreenSuccess)
-                            }
-                        }
-                    } else {
-                        Text(
-                            text = "Status: $intakeLocationStatus",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = if (intakeLocationStatus.contains("Fetching")) MaterialTheme.colorScheme.primary else RedError
-                        )
-                    }
- 
-                    Button(
-                        onClick = {
-                            if (hasFineLocation || hasCoarseLocation) {
-                                viewModel.fetchIntakeLocation()
-                            } else {
-                                permissionLauncher.launch(
-                                    arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
-                                )
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
-                    ) {
-                        if (isFetchingGps) {
-                            CircularProgressIndicator(modifier = Modifier.size(20.dp), color = MaterialTheme.colorScheme.onSecondary)
-                        } else {
-                            Text("Locate Location")
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        val isFirstTwo = targetInstrument?.let { it.code == "SQ-OOP" || it.code == "SSI-OOP" } ?: false
-                        
-                        if (respondentName.isBlank()) {
-                            Toast.makeText(context, "Please enter respondent name", Toast.LENGTH_SHORT).show()
-                            return@Button
-                        }
-                        
-                        if (isFirstTwo) {
-                            if (respondentAge.isBlank()) {
-                                Toast.makeText(context, "Please enter respondent age", Toast.LENGTH_SHORT).show()
-                                return@Button
-                            }
-                            val ageInt = respondentAge.toIntOrNull()
-                            if (targetInstrument!!.code.contains("OOP") && (ageInt == null || ageInt < 75)) {
-                                Toast.makeText(context, "Warning: Participant age is below 75 years (Target Population)", Toast.LENGTH_LONG).show()
-                            }
-                            if (respondentMobile.isNotBlank() && !respondentMobile.matches(Regex("^[0-9+() -]+$"))) {
-                                Toast.makeText(context, "Please enter a valid mobile number", Toast.LENGTH_SHORT).show()
-                                return@Button
-                            }
-                        }
-                        
-                        val finalAge = if (isFirstTwo) respondentAge else "0"
-                        val finalMobile = if (isFirstTwo) respondentMobile else ""
-                        
-                        viewModel.selectedCity.value = respondentCity
-                        viewModel.startDcaSession(
-                            instrument = targetInstrument!!,
-                            rName = respondentName,
-                            rAge = finalAge,
-                            rMobile = finalMobile,
-                            rCity = respondentCity
-                        )
-                        showIntakeDialog = false
-                        onNavigate()
-                    }
-                ) { Text("Start Survey") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showIntakeDialog = false }) { Text("Cancel") }
-            }
-        )
-    }
-
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Text("Research Instruments", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(12.dp))
-
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            items(instruments) { instrument ->
-                InstrumentCard(instrument, enabled = (userRole != Config.ADMIN_ROLE)) {
-                    targetInstrument = instrument
-                    respondentName = ""
-                    respondentAge = ""
-                    respondentMobile = ""
-                    viewModel.intakeLatitude.value = 0.0
-                    viewModel.intakeLongitude.value = 0.0
-                    viewModel.intakeAccuracy.value = 0f
-                    viewModel.intakeLocationStatus.value = "Not Captured"
-                    showIntakeDialog = true
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun CitySelector(selected: String, onSelect: (String) -> Unit) {
-    val cities = listOf("ND" to "New Delhi", "SG" to "Srinagar", "AZ" to "Aizawl", "CH" to "Chennai", "GN" to "Gandhinagar", "IN" to "Indore")
-    Row(modifier = Modifier.horizontalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
-        cities.forEach { (code, name) ->
-            FilterChip(selected = selected == code, onClick = { onSelect(code) }, label = { Text(name) }, modifier = Modifier.padding(end = 8.dp))
-        }
-    }
-}
-
-@Composable
-fun InstrumentCard(instrument: Instrument, enabled: Boolean = true, onClick: () -> Unit) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
-    
-    val scale by animateFloatAsState(
-        targetValue = if (isPressed && enabled) 0.95f else 1.0f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessLow
-        ),
-        label = "InstrumentCardScale"
-    )
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-            }
-            .clickable(
-                enabled = enabled,
-                interactionSource = interactionSource,
-                indication = if (enabled) LocalIndication.current else null,
-                onClick = onClick
-            )
-    ) {
-        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(instrument.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text(instrument.stakeholder, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-            }
-            Box(modifier = Modifier.background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(4.dp)).padding(horizontal = 8.dp, vertical = 4.dp)) {
-                Text(instrument.code, fontSize = 10.sp, color = MaterialTheme.colorScheme.onPrimaryContainer)
-            }
-        }
-    }
-}
-
-@Composable
-fun QAScreen(viewModel: SurveyViewModel) {
-    val allSurveys by viewModel.allSurveys.collectAsState()
-    val pendingQA = allSurveys.filter { it.status == "COMPLETED" && !it.isSynced }
-
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Text("Quality Assurance Queue", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(16.dp))
-
-        if (pendingQA.isEmpty()) {
-            EmptyStateCard("No records pending QA review.")
-        } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                items(pendingQA) { s -> QAItemCard(s) }
-            }
-        }
-    }
-}
-
-@Composable
-fun QAItemCard(s: SurveyEntity) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text("ID: ${s.surveyUid}", fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.height(8.dp))
-            Row {
-                Button(onClick = { /* Approve */ }, modifier = Modifier.weight(1f)) { Text("Approve") }
-                Spacer(modifier = Modifier.width(8.dp))
-                OutlinedButton(onClick = { /* Flag */ }, modifier = Modifier.weight(1f)) { Text("Flag Concern") }
-            }
-        }
-    }
-}
-
-@Composable
-fun RecordsScreen(viewModel: SurveyViewModel) {
-    val surveys by viewModel.filteredSurveys.collectAsState()
-    var searchQuery by remember { mutableStateOf("") }
-    val filteredSurveys = surveys.filter { it.participantName.contains(searchQuery, ignoreCase = true) }
-
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        OutlinedTextField(value = searchQuery, onValueChange = { searchQuery = it }, modifier = Modifier.fillMaxWidth(), placeholder = { Text("Search records...") }, leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) })
-        Spacer(modifier = Modifier.height(16.dp))
-
-        if (filteredSurveys.isEmpty()) {
-            EmptyStateCard("No records found.")
-        } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                items(filteredSurveys) { s -> 
-                    val context = LocalContext.current
-                    SurveyRecordCard(
-                        s = s,
-                        onDelete = { viewModel.deleteSurvey(s) },
-                        onEmail = {
-                            val subject = "CivicAge Survey Response – ${s.participantName} – ${s.surveyUid.split("-").getOrNull(4) ?: ""}"
-                            val body = viewModel.buildDetailedReportText(s)
-                            shareSurveyReportViaEmail(context, body, subject)
-                        }
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun SurveyRecordCard(s: SurveyEntity, onDelete: () -> Unit, onEmail: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(s.participantName.ifBlank { "Unnamed Respondent" }, fontWeight = FontWeight.Bold)
-            Text(s.surveyUid, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-            Spacer(modifier = Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(s.status, color = if (s.status == "COMPLETED") GreenSuccess else OrangeWarning, fontWeight = FontWeight.Bold)
-                Row {
-                    IconButton(onClick = onEmail) { Icon(Icons.Default.Email, contentDescription = "Email Report", tint = MaterialTheme.colorScheme.primary) }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, contentDescription = null, tint = RedError) }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun ExportScreen(viewModel: SurveyViewModel) {
-    val surveys by viewModel.allSurveys.collectAsState()
-    val syncedCount by viewModel.syncedCount.collectAsState()
-    val context = LocalContext.current
-    val pendingSyncCount = surveys.size - syncedCount
-
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text("Sync Status", fontWeight = FontWeight.Bold)
-                Text("Synced: $syncedCount | Pending: $pendingSyncCount")
-                Spacer(modifier = Modifier.height(16.dp))
-                Button(onClick = { Toast.makeText(context, "Syncing...", Toast.LENGTH_SHORT).show() }, modifier = Modifier.fillMaxWidth()) { Text("Sync Now") }
-            }
-        }
-        
-        Spacer(modifier = Modifier.height(24.dp))
-        Button(
-            onClick = {
-                if (surveys.isEmpty()) {
-                    Toast.makeText(context, "No records to export.", Toast.LENGTH_SHORT).show()
-                } else {
-                    val jsonList = surveys.map { viewModel.exportSurveyToJson(it) }
-                    val combinedJson = "[\n" + jsonList.joinToString(",\n") + "\n]"
-                    val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                    val clip = android.content.ClipData.newPlainText("CivicAge Survey JSON Export", combinedJson)
-                    clipboard.setPrimaryClip(clip)
-                    
-                    try {
-                        val file = java.io.File(context.cacheDir, "surveys_export.json")
-                        file.writeText(combinedJson)
-                        Toast.makeText(context, "Copied JSON to clipboard and saved to: ${file.absolutePath}", Toast.LENGTH_LONG).show()
-                    } catch (e: Exception) {
-                        Toast.makeText(context, "Copied to clipboard, but error saving to cache: ${e.message}", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Export All to JSON (Copy & Save to Cache)")
-        }
-        Spacer(modifier = Modifier.height(12.dp))
-        Button(
-            onClick = {
-                if (surveys.isEmpty()) {
-                    Toast.makeText(context, "No records to export.", Toast.LENGTH_SHORT).show()
-                } else {
-                    val tsvData = viewModel.exportAllSurveysToTsv(surveys)
-                    val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                    val clip = android.content.ClipData.newPlainText("CivicAge Survey TSV Export", tsvData)
-                    clipboard.setPrimaryClip(clip)
-                    Toast.makeText(context, "Copied combined MCQ TSV (Excel-ready) data to clipboard!", Toast.LENGTH_LONG).show()
-                }
-            },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Export All to Excel/TSV (Copy to Clipboard)")
-        }
-        Spacer(modifier = Modifier.height(12.dp))
-        Button(
-            onClick = {
-                if (surveys.isEmpty()) {
-                    Toast.makeText(context, "No survey records available to email.", Toast.LENGTH_SHORT).show()
-                } else {
-                    val subject = "CivicAge Combined Survey Records"
-                    val reportBuilder = StringBuilder()
-                    reportBuilder.appendLine("CIVICAGE SURVEY COMBINED REPORT")
-                    reportBuilder.appendLine("Total Records: ${surveys.size}")
-                    reportBuilder.appendLine("Generated At: ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())}")
-                    reportBuilder.appendLine("=========================================\n")
-                    surveys.forEachIndexed { idx, s ->
-                        reportBuilder.appendLine("RECORD #${idx + 1}")
-                        reportBuilder.appendLine(viewModel.buildDetailedReportText(s))
-                        reportBuilder.appendLine("\n-----------------------------------------\n")
-                    }
-                    shareSurveyReportViaEmail(context, reportBuilder.toString(), subject)
-                }
-            },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Email Records to Admin")
-        }
-    }
-}
-
-@Composable
-fun SettingsScreen(viewModel: SurveyViewModel) {
-    val appearance by viewModel.appearanceMode.collectAsState()
-    val fontSize by viewModel.fontSizeMode.collectAsState()
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Text("Settings", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(24.dp))
-        Text("Theme Appearance")
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("Light", "Dark", "B&W").forEach { mode ->
-                FilterChip(
-                    selected = appearance.contains(mode),
-                    onClick = { viewModel.setAppearanceMode(mode) },
-                    label = { Text(mode, modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)) },
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun ProfileScreen(viewModel: SurveyViewModel, onLogout: () -> Unit) {
-    val name by viewModel.surveyorName.collectAsState()
-    val email by viewModel.surveyorEmail.collectAsState()
-    val id by viewModel.surveyorId.collectAsState()
-
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-        Icon(Icons.Default.AccountCircle, contentDescription = null, modifier = Modifier.size(100.dp))
-        Spacer(modifier = Modifier.height(16.dp))
-        Text(name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        Text(email, color = Color.Gray)
-        Text("ID: $id")
-        Spacer(modifier = Modifier.height(40.dp))
-        Button(onClick = { viewModel.logout(); onLogout() }, colors = ButtonDefaults.buttonColors(containerColor = RedError)) { Text("Logout") }
-    }
-}
-
-@Composable
 fun EmptyStateCard(message: String) {
     Card(modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp), colors = CardDefaults.cardColors(containerColor = Color.Transparent), border = BorderStroke(1.dp, Color.LightGray)) {
         Column(modifier = Modifier.padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -1085,51 +1193,13 @@ fun EmptyStateCard(message: String) {
 fun shareSurveyReportViaEmail(context: android.content.Context, reportText: String, subject: String) {
     val intent = Intent(Intent.ACTION_SENDTO).apply {
         data = Uri.parse("mailto:")
-        putExtra(Intent.EXTRA_EMAIL, arrayOf("mdc18042007@gmail.com"))
+        putExtra(Intent.EXTRA_EMAIL, arrayOf("scscpdata@gmail.com"))
         putExtra(Intent.EXTRA_SUBJECT, subject)
         putExtra(Intent.EXTRA_TEXT, reportText)
     }
-    
-    val gmailIntent = Intent(Intent.ACTION_SENDTO).apply {
-        data = Uri.parse("mailto:mdc18042007@gmail.com")
-        putExtra(Intent.EXTRA_SUBJECT, subject)
-        putExtra(Intent.EXTRA_TEXT, reportText)
-        setPackage("com.google.android.gm")
-    }
-
     try {
-        context.startActivity(gmailIntent)
+        context.startActivity(Intent.createChooser(intent, "Send Email via..."))
     } catch (e: Exception) {
-        try {
-            context.startActivity(Intent.createChooser(intent, "Send Email via..."))
-        } catch (ex: Exception) {
-            Toast.makeText(context, "No email client found.", Toast.LENGTH_SHORT).show()
-        }
-    }
-}
-
-fun shareSurveyReportViaMasterEmail(context: android.content.Context, reportText: String, subject: String, targetEmail: String) {
-    val intent = Intent(Intent.ACTION_SENDTO).apply {
-        data = Uri.parse("mailto:")
-        putExtra(Intent.EXTRA_EMAIL, arrayOf(targetEmail))
-        putExtra(Intent.EXTRA_SUBJECT, subject)
-        putExtra(Intent.EXTRA_TEXT, reportText)
-    }
-    
-    val gmailIntent = Intent(Intent.ACTION_SENDTO).apply {
-        data = Uri.parse("mailto:$targetEmail")
-        putExtra(Intent.EXTRA_SUBJECT, subject)
-        putExtra(Intent.EXTRA_TEXT, reportText)
-        setPackage("com.google.android.gm")
-    }
-
-    try {
-        context.startActivity(gmailIntent)
-    } catch (e: Exception) {
-        try {
-            context.startActivity(Intent.createChooser(intent, "Send Email via..."))
-        } catch (ex: Exception) {
-            Toast.makeText(context, "No email client found.", Toast.LENGTH_SHORT).show()
-        }
+        Toast.makeText(context, "No email client found.", Toast.LENGTH_SHORT).show()
     }
 }

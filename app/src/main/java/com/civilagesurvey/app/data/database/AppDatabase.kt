@@ -8,12 +8,13 @@ import androidx.room.RoomDatabase
 @Database(
     entities = [
         SurveyEntity::class,
+        PushRequestEntity::class,
         UserProfileEntity::class,
         SyncLogEntity::class,
         FormQuestionEntity::class,
         GoogleFormSourceEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

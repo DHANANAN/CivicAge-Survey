@@ -76,47 +76,52 @@ class SurveyViewModel(
     val surveyorEmail = MutableStateFlow("")
     val surveyorName = MutableStateFlow("")
     val surveyorId = MutableStateFlow("")
-    val userRole = MutableStateFlow("Field Surveyor")
-    val isNetworkOnline = MutableStateFlow(true)
-    val authStatusMessage = MutableStateFlow("")
-    val activeUserUid = MutableStateFlow("")
+    val userRole = MutableStateFlow(Config.ROLE_NORMAL)
+    val allowedPushToDrive = MutableStateFlow(true)
+    val isMasterAuthenticated = MutableStateFlow(false)
+    val showSwipeHintOverlay = MutableStateFlow(true)
+    val archivedSurveyUids = MutableStateFlow<Set<String>>(emptySet())
 
-    // Survivor / Participant Session
+    // Participant & Caregiver Profile Flows
     val survivorName = MutableStateFlow("")
     val survivorAge = MutableStateFlow("")
     val survivorEmail = MutableStateFlow("")
     val survivorPhone = MutableStateFlow("")
-
-    // Caregiver / Respondent Session
     val caregiverName = MutableStateFlow("")
     val caregiverAge = MutableStateFlow("")
     val caregiverEmail = MutableStateFlow("")
     val caregiverPhone = MutableStateFlow("")
     val caregiverRelation = MutableStateFlow("")
 
-    // Google Forms State
-    val googleFormSources: StateFlow<List<GoogleFormSourceEntity>> = repository.allGoogleFormSources
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-    
     val mirrorResult = MutableStateFlow<GoogleFormsRepository.MirrorResult?>(null)
     val isFetchingForm = MutableStateFlow(false)
 
-    // Options and customization
     val appearanceMode = MutableStateFlow("Professional Light")
     val fontSizeMode = MutableStateFlow("Standard")
     val isFullscreenMode = MutableStateFlow(false)
     val isHighContrast = MutableStateFlow(false)
     val speechLanguage = MutableStateFlow("English")
-    
+
+    val isNetworkOnline = MutableStateFlow(true)
+    val authStatusMessage = MutableStateFlow("")
+    val activeUserUid = MutableStateFlow("")
+
     // Lists
     val allSurveys: StateFlow<List<SurveyEntity>> = repository.allSurveys
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val pendingQaSurveys: StateFlow<List<SurveyEntity>> = allSurveys
+        .map { list -> list.filter { it.status == "pending_qa" } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val allPushRequests: StateFlow<List<PushRequestEntity>> = repository.allPushRequests
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     val filteredSurveys: StateFlow<List<SurveyEntity>> = combine(allSurveys, userRole, surveyorId) { surveys, role, currentId ->
-        if (role == Config.ADMIN_ROLE) {
+        if (role == Config.ROLE_MASTER || role == Config.ADMIN_ROLE || role == Config.ROLE_QA) {
             surveys
         } else {
-            surveys.filter { it.createdBy == currentId }
+            surveys.filter { it.createdBy == currentId || it.surveyorId == currentId }
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -473,14 +478,14 @@ class SurveyViewModel(
 
     fun fetchGpsCoordinates() {
         isFetchingGps.value = true
-        locationHelper.getCurrentLocation { loc ->
+        locationHelper.getCurrentLocation { result ->
             isFetchingGps.value = false
-            if (loc != null) {
+            if (result.location != null) {
                 val current = activeSurvey.value ?: return@getCurrentLocation
                 val updated = current.copy(
-                    latitude = loc.latitude,
-                    longitude = loc.longitude,
-                    gpsAccuracy = loc.accuracy,
+                    latitude = result.location.latitude,
+                    longitude = result.location.longitude,
+                    gpsAccuracy = result.accuracy,
                     updatedAt = System.currentTimeMillis()
                 )
                 viewModelScope.launch {
@@ -494,16 +499,16 @@ class SurveyViewModel(
     fun fetchIntakeLocation() {
         isFetchingGps.value = true
         intakeLocationStatus.value = "Fetching..."
-        locationHelper.getCurrentLocation { loc ->
+        locationHelper.getCurrentLocation { result ->
             isFetchingGps.value = false
-            if (loc != null) {
-                intakeLatitude.value = loc.latitude
-                intakeLongitude.value = loc.longitude
-                intakeAccuracy.value = loc.accuracy
-                intakeCapturedTime.value = System.currentTimeMillis()
-                intakeLocationStatus.value = "Success"
+            if (result.location != null) {
+                intakeLatitude.value = result.location.latitude
+                intakeLongitude.value = result.location.longitude
+                intakeAccuracy.value = result.accuracy
+                intakeCapturedTime.value = result.timestamp
+                intakeLocationStatus.value = "Success (${result.accuracy.toInt()}m)"
             } else {
-                intakeLocationStatus.value = "Permission denied or GPS disabled"
+                intakeLocationStatus.value = result.errorMessage ?: "Permission denied or GPS disabled"
             }
         }
     }
@@ -1349,6 +1354,88 @@ class SurveyViewModel(
                 }
             }
         }
+    }
+
+    fun approveInstrument(surveyUid: String, qaNotes: String, onResult: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            val success = repository.updateInstrumentStatus(
+                surveyUid = surveyUid,
+                newStatus = "approved",
+                qaNotes = qaNotes,
+                approvedBy = surveyorName.value.ifBlank { surveyorEmail.value }
+            )
+            com.civilagesurvey.app.telemetry.TelemetryManager.logQaAction(surveyUid, "approve", surveyorEmail.value)
+            onResult(success)
+        }
+    }
+
+    fun rejectInstrument(surveyUid: String, qaNotes: String, onResult: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            val success = repository.updateInstrumentStatus(
+                surveyUid = surveyUid,
+                newStatus = "rejected",
+                qaNotes = qaNotes,
+                approvedBy = ""
+            )
+            com.civilagesurvey.app.telemetry.TelemetryManager.logQaAction(surveyUid, "reject", surveyorEmail.value)
+            onResult(success)
+        }
+    }
+
+    fun createPushRequest(surveyUid: String, onResult: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            val request = PushRequestEntity(
+                requestId = "REQ-${UUID.randomUUID().toString().take(8)}",
+                instrumentId = surveyUid,
+                requestedBy = surveyorEmail.value.ifBlank { surveyorId.value },
+                requestedAt = System.currentTimeMillis(),
+                status = "open"
+            )
+            val success = repository.createPushRequest(request)
+            repository.updateInstrumentStatus(surveyUid, "pending_qa")
+            com.civilagesurvey.app.telemetry.TelemetryManager.logQaAction(surveyUid, "request_qa", surveyorEmail.value)
+            onResult(success)
+        }
+    }
+
+    fun verifyMasterPassword(password: String): Boolean {
+        val clean = password.trim()
+        val isValid = (clean == "Scscd@2026" || clean == "SCSC2026" || clean == "mdc18042007@gmail.com")
+        if (isValid) {
+            isMasterAuthenticated.value = true
+        }
+        return isValid
+    }
+
+    fun archiveSurvey(surveyUid: String) {
+        archivedSurveyUids.value = archivedSurveyUids.value + surveyUid
+    }
+
+    fun unarchiveSurvey(surveyUid: String) {
+        archivedSurveyUids.value = archivedSurveyUids.value - surveyUid
+    }
+
+    fun dismissSwipeHintOverlay() {
+        showSwipeHintOverlay.value = false
+        prefs.edit().putBoolean("dismissedSwipeHint", true).apply()
+    }
+
+    fun exportSurveyToMetadataJson(survey: SurveyEntity): String {
+        val map = mapOf(
+            "instrumentId" to survey.surveyUid,
+            "uploadedAt" to SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).format(Date(survey.createdAt)),
+            "uploadedBy" to survey.surveyorEmail,
+            "geo" to mapOf(
+                "lat" to survey.latitude,
+                "lng" to survey.longitude,
+                "accuracy" to survey.gpsAccuracy,
+                "timestamp" to survey.geoTimestamp
+            ),
+            "geoTier" to survey.geoTier,
+            "qaNotes" to survey.qaNotes,
+            "version" to "2.2"
+        )
+        return moshi.adapter(Map::class.java).toJson(map)
     }
 
     override fun onCleared() {
