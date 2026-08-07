@@ -660,26 +660,7 @@ object InstrumentBank {
         consentCode = "CONSENT-KI"
     )
 
-    private val qaTools = Instrument(
-        code = "QA-v1.0",
-        title = "Quality Assurance Checklists",
-        stakeholder = "All",
-        type = InstrumentType.ADMINISTRATIVE,
-        themes = listOf(
-            InterviewTheme(
-                code = "T1",
-                title = "Daily Field Supervisors & RAs Checklist",
-                openingQuestion = "Systematic review of daily diaries, session quality tracking, pilot testing evaluations, and inter-rater reliability coding.",
-                probes = listOf(
-                    "Check consistency of Participant IDs across all session forms.",
-                    "Confirm presence and date of signed/oral consent prior to session data collection.",
-                    "Verify session duration limits (SQ: max 55 min, SSI: max 75 min).",
-                    "Perform data quality assessments, transcript requests, and backup verification."
-                )
-            )
-        ),
-        consentCode = null
-    )
+
 
     val instruments = listOf(
         sqOop,
@@ -696,8 +677,7 @@ object InstrumentBank {
         sqCgSsiCg,
         foOop,
         fgdOopCg,
-        doctrinal,
-        qaTools
+        doctrinal
     )
 
     private fun getDigitalAnxietyText(index: Int): String = when (index) {

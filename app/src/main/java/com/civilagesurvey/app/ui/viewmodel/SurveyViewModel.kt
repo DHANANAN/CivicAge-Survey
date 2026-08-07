@@ -431,6 +431,8 @@ class SurveyViewModel(
             participantEmail = "",
             participantAgeGroup = selectedStakeholder.value,
             manualLocality = rCity,
+            city = rCity.ifBlank { selectedCity.value.ifBlank { "ND" } },
+            instrumentType = instrument.code,
             respondentName = rName,
             respondentAge = rAge.toIntOrNull() ?: 0,
             respondentEmail = "",
@@ -439,6 +441,7 @@ class SurveyViewModel(
             latitude = intakeLatitude.value,
             longitude = intakeLongitude.value,
             gpsAccuracy = intakeAccuracy.value,
+            geoTimestamp = System.currentTimeMillis(),
             answersJson = answersJsonStr
         )
         
@@ -781,40 +784,27 @@ class SurveyViewModel(
     fun finalizeDcaSession() {
         val current = activeSurvey.value ?: return
         viewModelScope.launch(Dispatchers.IO) {
-            // Anonymization: Ensure no names/phones in the export data
-            val anonymizedSurvey = current.copy(
-                participantName = "[Participant]",
-                participantAge = 0, // Age group is preserved in another field
-                surveyorName = "[Surveyor]",
-                surveyorEmail = "[Redacted]",
-                surveyorPhone = "[Redacted]",
+            val finalSurvey = current.copy(
                 status = "COMPLETED",
+                isSynced = false,
                 updatedAt = System.currentTimeMillis()
             )
-            
-            // Generate local files
-            val docsDir = context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS)
-            val jsonFile = File(docsDir, "${current.surveyUid}_anonymized.json")
-            val txtFile = File(docsDir, "${current.surveyUid}_report.txt")
-            
-            val jsonContent = exportSurveyToJson(anonymizedSurvey)
-            val txtContent = buildReportText(anonymizedSurvey)
-            
-            jsonFile.writeText(jsonContent)
-            txtFile.writeText(txtContent)
-            
-            val finalSurvey = anonymizedSurvey.copy(
-                jsonExportPath = jsonFile.absolutePath,
-                transcriptExportPath = txtFile.absolutePath,
-                isSynced = false // Mark for sync
-            )
-            repository.insertSurvey(finalSurvey)
-            
-            // Linkage file (Non-anonymized, encrypted - simplified here as local-only)
-            // In production, this would be encrypted and stored separately.
 
-            withContext(Dispatchers.Main) {
-                activeSurvey.value = finalSurvey
+            // Persist locally to Room (auto-save)
+            repository.insertSurvey(finalSurvey)
+
+            // Auto-post completed record to Apps Script → Google Drive + Sheets
+            val posted = kotlin.runCatching {
+                repository.postRecordToAppsScript(finalSurvey)
+            }.getOrDefault(false)
+
+            // Mark synced if post succeeded
+            if (posted) {
+                val syncedSurvey = finalSurvey.copy(isSynced = true, updatedAt = System.currentTimeMillis())
+                repository.insertSurvey(syncedSurvey)
+                withContext(Dispatchers.Main) { activeSurvey.value = syncedSurvey }
+            } else {
+                withContext(Dispatchers.Main) { activeSurvey.value = finalSurvey }
             }
         }
     }
