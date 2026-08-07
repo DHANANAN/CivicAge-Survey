@@ -430,29 +430,53 @@ fun HomeScreen(viewModel: SurveyViewModel, onNavigate: (String) -> Unit) {
     val userRole by viewModel.userRole.collectAsState()
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
-        Text("DCA Dashboard", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold)
-        Text("Smart Cities Responsible Citizens Initiative | ICSSR 2025-26", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
-        Spacer(modifier = Modifier.height(24.dp))
+        if (userRole == Config.ROLE_MASTER || userRole == Config.ADMIN_ROLE) {
+            Text("DCA Master Control", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold)
+            Text("Smart Cities Responsible Citizens Initiative | Records Reviewer", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+            Spacer(modifier = Modifier.height(24.dp))
 
-        if (userRole == Config.ROLE_MASTER || userRole == Config.ADMIN_ROLE || userRole == Config.ROLE_QA) {
             DashboardStats(allSurveys.size, draftCount, completedCount, syncedCount)
             Spacer(modifier = Modifier.height(24.dp))
-            Text("Quick Actions", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.height(12.dp))
 
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                QuickActionCard("Start Instrument", Icons.Default.Add, { onNavigate("instruments") }, Modifier.weight(1f))
-                QuickActionCard("View Records", Icons.Default.History, { onNavigate("records") }, Modifier.weight(1f))
-            }
-            Spacer(modifier = Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (userRole == Config.ROLE_QA || userRole == Config.ROLE_MASTER || userRole == Config.ADMIN_ROLE) {
-                    QuickActionCard("QA Queue", Icons.Default.FactCheck, { onNavigate("qa") }, Modifier.weight(1f))
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onNavigate("records") },
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
+            ) {
+                Row(
+                    modifier = Modifier.padding(24.dp).fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.History,
+                        contentDescription = null,
+                        modifier = Modifier.size(48.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Review & Approve Records",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            "Inspect submitted surveys, view answers, and approve for Google Drive & Google Sheets sync.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.Gray
+                        )
+                    }
                 }
-                QuickActionCard("Profile", Icons.Default.AccountCircle, { onNavigate("profile") }, Modifier.weight(1f))
             }
         } else {
-            // Simplified Normal User Home Screen
+            Text("DCA Field Portal", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold)
+            Text("Smart Cities Responsible Citizens Initiative | Field Surveyor", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+            Spacer(modifier = Modifier.height(24.dp))
+
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -479,11 +503,32 @@ fun HomeScreen(viewModel: SurveyViewModel, onNavigate: (String) -> Unit) {
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        "Click here to select a research instrument and begin a high-accuracy geo-tagged survey session.",
+                        "Click here to select an instrument and begin a high-accuracy geo-tagged survey session.",
                         style = MaterialTheme.typography.bodyMedium,
                         textAlign = TextAlign.Center,
                         color = Color.Gray
                     )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onNavigate("records") },
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Row(
+                    modifier = Modifier.padding(20.dp).fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.History, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column {
+                        Text("My Submitted Records", fontWeight = FontWeight.Bold)
+                        Text("View past submitted sessions and sync status", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                    }
                 }
             }
         }
@@ -882,6 +927,7 @@ fun InstrumentSelectorScreen(viewModel: SurveyViewModel, onNavigate: () -> Unit)
                 ) {
                     Text("Instrument: ${targetInstrument!!.title}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
 
+                    val targetIndex = instruments.indexOf(targetInstrument)
                     if (!isSpecialInstrument) {
                         OutlinedTextField(
                             value = respondentName,
@@ -889,18 +935,14 @@ fun InstrumentSelectorScreen(viewModel: SurveyViewModel, onNavigate: () -> Unit)
                             label = { Text("Respondent Name *") },
                             modifier = Modifier.fillMaxWidth()
                         )
-                        OutlinedTextField(
-                            value = respondentAge,
-                            onValueChange = { respondentAge = it },
-                            label = { Text("Respondent Age *") },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        OutlinedTextField(
-                            value = respondentMobile,
-                            onValueChange = { respondentMobile = it },
-                            label = { Text("Mobile Number (Optional)") },
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                        if (targetIndex <= 1) {
+                            OutlinedTextField(
+                                value = respondentAge,
+                                onValueChange = { respondentAge = it },
+                                label = { Text("Respondent Age *") },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
                     } else {
                         Text(
                             "Special Research Instrument: Personal identification (Name/Age/Phone) is omitted for privacy. High-accuracy Geo Tagging is MANDATORY.",
@@ -977,7 +1019,21 @@ fun InstrumentSelectorScreen(viewModel: SurveyViewModel, onNavigate: () -> Unit)
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Text("Research Instruments", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(8.dp))
+
+        if (userRole == Config.ROLE_MASTER || userRole == Config.ADMIN_ROLE) {
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f))
+            ) {
+                Text(
+                    "Master Reviewer Mode: Master users review and approve submitted records under the Records screen, and cannot take new instruments directly.",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    modifier = Modifier.padding(12.dp)
+                )
+            }
+        }
 
         LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             items(instruments) { instrument ->
