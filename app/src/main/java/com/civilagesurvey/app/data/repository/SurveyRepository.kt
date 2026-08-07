@@ -30,18 +30,16 @@ class SurveyRepository(private val surveyDao: SurveyDao) {
     suspend fun getSurveyById(uid: String): SurveyEntity? = surveyDao.getSurveyById(uid)
 
     suspend fun insertSurvey(survey: SurveyEntity) {
-        // Enforce geo accuracy <= 100m and timestamp freshness <= 30s
-        val ageMs = System.currentTimeMillis() - survey.geoTimestamp
-        if (survey.gpsAccuracy > 100f || ageMs > 30000L) {
-            throw IllegalArgumentException("Strict Geo Tagging Failed: Accuracy must be <= 100m (current: ${survey.gpsAccuracy}m) and timestamp <= 30s (current: ${ageMs / 1000}s)")
-        }
-
+        // Geo accuracy is enforced at the UI intake layer before session start.
+        // We do NOT block DRAFT/COMPLETED inserts here — the timestamp was captured
+        // at intake (which may be minutes before finalization), not at insert time.
         surveyDao.insertSurvey(survey)
-        
-        // Sync record to Firestore records/{recordId} and Web App
-        kotlin.runCatching {
-            syncRecordToFirestore(survey)
-            postRecordToAppsScript(survey)
+
+        // Sync record to Firestore records/{recordId} on completion
+        if (survey.status == "COMPLETED" || survey.status == "completed") {
+            kotlin.runCatching {
+                syncRecordToFirestore(survey)
+            }
         }
     }
 

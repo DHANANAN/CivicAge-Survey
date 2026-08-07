@@ -202,7 +202,6 @@ fun MainSurveyApp(viewModel: SurveyViewModel) {
                             "home" -> "DCA Dashboard"
                             "instruments" -> "Research Instruments"
                             "records" -> "Survey Records"
-                            "qa" -> "Quality Assurance Queue"
                             "export" -> "Data Export & Sync"
                             "settings" -> "Settings"
                             "master_control" -> "Master Control Panel"
@@ -303,7 +302,6 @@ fun MainSurveyApp(viewModel: SurveyViewModel) {
                                     "instruments" -> InstrumentSelectorScreen(viewModel) { currentScreen = "consent" }
                                     "consent" -> ConsentFlowScreen(viewModel) { currentScreen = "runner" }
                                     "runner" -> InstrumentRunnerScreen(viewModel) { currentScreen = "home" }
-                                    "qa" -> QADashboardScreen(viewModel)
                                     "records" -> RecordsScreen(viewModel)
                                     "export" -> ExportScreen(viewModel)
                                     "settings" -> SettingsScreen(viewModel) { currentScreen = "master_control" }
@@ -794,7 +792,7 @@ fun RecordsScreen(viewModel: SurveyViewModel) {
                     Icon(Icons.Default.Swipe, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        "Hint: Swipe LEFT for Edit/Share/Request QA. Swipe RIGHT for Archive/Delete.",
+                        "Hint: Swipe LEFT to Share/View details. Swipe RIGHT to Archive or Delete.",
                         fontSize = 12.sp,
                         modifier = Modifier.weight(1f)
                     )
@@ -824,8 +822,13 @@ fun RecordsScreen(viewModel: SurveyViewModel) {
                         onDelete = { viewModel.deleteSurvey(s) },
                         onArchive = { viewModel.archiveSurvey(s.surveyUid) },
                         onRequestQa = {
-                            viewModel.createPushRequest(s.surveyUid) { success ->
-                                if (success) Toast.makeText(context, "QA Review Requested", Toast.LENGTH_SHORT).show()
+                            // Approve & Sync — sends full payload to Apps Script → Drive + Sheets
+                            viewModel.approveInstrument(s.surveyUid, "Approved by Master") { success ->
+                                if (success) {
+                                    Toast.makeText(context, "✓ Approved! Syncing to Google Drive & Sheets...", Toast.LENGTH_LONG).show()
+                                } else {
+                                    Toast.makeText(context, "Sync failed. Check network and try again.", Toast.LENGTH_SHORT).show()
+                                }
                             }
                         },
                         onShare = {
@@ -1109,17 +1112,88 @@ fun ExportScreen(viewModel: SurveyViewModel) {
 @Composable
 fun SettingsScreen(viewModel: SurveyViewModel, onNavigateMasterControl: () -> Unit) {
     val userRole by viewModel.userRole.collectAsState()
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+    val appearanceMode by viewModel.appearanceMode.collectAsState()
+    val fontSizeMode by viewModel.fontSizeMode.collectAsState()
+
+    val appearanceOptions = listOf("Professional Light", "Dark Mode", "Black & White")
+    val fontSizeOptions = listOf("Standard", "Large", "Extra Large")
+
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
         Text("Settings", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         Spacer(modifier = Modifier.height(24.dp))
 
-        Text("General Settings", fontWeight = FontWeight.Bold)
+        // ─── Appearance ───────────────────────────────────────────────
+        Text("Appearance", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
         Spacer(modifier = Modifier.height(8.dp))
-        Text("Language: English (Locale en-IN)")
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("Theme Mode", fontWeight = FontWeight.SemiBold)
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    appearanceOptions.forEach { option ->
+                        val isSelected = appearanceMode == option
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { viewModel.appearanceMode.value = option },
+                            label = {
+                                Text(
+                                    when (option) {
+                                        "Professional Light" -> "☀️ Light"
+                                        "Dark Mode" -> "🌙 Dark"
+                                        else -> "⬛ B&W"
+                                    },
+                                    fontSize = 12.sp
+                                )
+                            }
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // ─── Font Size ───────────────────────────────────────────────
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("Font Size", fontWeight = FontWeight.SemiBold)
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    fontSizeOptions.forEach { option ->
+                        FilterChip(
+                            selected = fontSizeMode == option,
+                            onClick = { viewModel.fontSizeMode.value = option },
+                            label = { Text(option, fontSize = 12.sp) }
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // ─── General ─────────────────────────────────────────────────
+        Text("General", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+        Spacer(modifier = Modifier.height(8.dp))
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("Language", fontWeight = FontWeight.SemiBold)
+                Text("English (Locale en-IN)", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+            }
+        }
 
         if (userRole == Config.ROLE_MASTER || userRole == Config.ADMIN_ROLE) {
-            Spacer(modifier = Modifier.height(32.dp))
-            Text("Advanced Settings", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+            Spacer(modifier = Modifier.height(24.dp))
+            Text("Advanced", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
             Spacer(modifier = Modifier.height(8.dp))
 
             Card(
