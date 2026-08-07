@@ -808,56 +808,30 @@ fun SwipeableSurveyRecordCard(
         offsetX = (offsetX + delta).coerceIn(-250f, 250f)
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(
-                if (offsetX > 50f) Color(0xFFFFEBEE)
-                else if (offsetX < -50f) Color(0xFFE3F2FD)
-                else MaterialTheme.colorScheme.surfaceVariant
-            )
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
     ) {
-        // Actions Background
-        Row(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
-            horizontalArrangement = if (offsetX > 0) Arrangement.Start else Arrangement.End,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            if (offsetX > 50f) {
-                IconButton(onClick = onArchive) { Icon(Icons.Default.Archive, contentDescription = "Archive", tint = OrangeWarning) }
-                IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, contentDescription = "Delete", tint = RedError) }
-            } else if (offsetX < -50f) {
-                IconButton(onClick = onShare) { Icon(Icons.Default.Share, contentDescription = "Share", tint = MaterialTheme.colorScheme.primary) }
-                IconButton(onClick = onRequestQa) { Icon(Icons.Default.Send, contentDescription = "Request QA", tint = GreenSuccess) }
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(survey.participantName.ifBlank { "Respondent Record" }, fontWeight = FontWeight.Bold)
+            Text("Record ID: ${survey.surveyUid}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                Text("Status: ${survey.status}", color = if (survey.status == "approved") GreenSuccess else OrangeWarning, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Text("Accuracy: ${survey.gpsAccuracy.roundToInt()}m", fontSize = 12.sp, color = Color.Gray)
             }
-        }
-
-        // Foreground Card
-        Card(
-            modifier = Modifier
-                .offset { IntOffset(offsetX.roundToInt(), 0) }
-                .draggable(
-                    state = draggableState,
-                    orientation = Orientation.Horizontal,
-                    onDragStopped = {
-                        if (offsetX > 200f) {
-                            onArchive()
-                        } else if (offsetX < -200f) {
-                            onRequestQa()
-                        }
-                        offsetX = 0f
-                    }
-                )
-                .fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(survey.participantName.ifBlank { "Unnamed Respondent" }, fontWeight = FontWeight.Bold)
-                Text(survey.surveyUid, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                    Text("Status: ${survey.status}", color = if (survey.status == "approved") GreenSuccess else OrangeWarning, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                    Text("GPS: ${survey.gpsAccuracy.roundToInt()}m", fontSize = 12.sp, color = Color.Gray)
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(
+                    onClick = onShare,
+                    modifier = Modifier.padding(end = 8.dp)
+                ) {
+                    Text("View", fontSize = 12.sp)
+                }
+                Button(
+                    onClick = onRequestQa, // Triggers Approve in Master mode
+                    colors = ButtonDefaults.buttonColors(containerColor = GreenSuccess)
+                ) {
+                    Text(if (survey.status == "approved") "Approved" else "Approve & Sync", fontSize = 12.sp, color = Color.White)
                 }
             }
         }
