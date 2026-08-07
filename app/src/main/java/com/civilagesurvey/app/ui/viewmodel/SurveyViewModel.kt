@@ -1346,7 +1346,7 @@ class SurveyViewModel(
         }
     }
 
-    fun approveInstrument(surveyUid: String, qaNotes: String, onResult: (Boolean) -> Unit) {
+    fun approveInstrument(surveyUid: String, qaNotes: String, onResult: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
             val success = repository.updateInstrumentStatus(
                 surveyUid = surveyUid,
@@ -1355,7 +1355,19 @@ class SurveyViewModel(
                 approvedBy = surveyorName.value.ifBlank { surveyorEmail.value }
             )
             com.civilagesurvey.app.telemetry.TelemetryManager.logQaAction(surveyUid, "approve", surveyorEmail.value)
-            onResult(success)
+
+            // Post to Apps Script → appends to Google Doc
+            var docUrl: String? = null
+            if (success) {
+                val survey = repository.getSurveyById(surveyUid)
+                if (survey != null) {
+                    docUrl = kotlin.runCatching {
+                        repository.postRecordToAppsScript(survey)
+                        "https://docs.google.com/document/d/10U1MCP3_neriSMV47ch7OAD15Ev2FgtQjLW8svfXraQ/edit"
+                    }.getOrNull()
+                }
+            }
+            onResult(success, docUrl)
         }
     }
 

@@ -616,9 +616,9 @@ fun QADashboardScreen(viewModel: SurveyViewModel) {
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Button(
                                     onClick = {
-                                        viewModel.approveInstrument(survey.surveyUid, "Approved by QA") { success ->
+                                        viewModel.approveInstrument(survey.surveyUid, "Approved by QA") { success, docUrl ->
                                             if (success) {
-                                                Toast.makeText(context, "Approved! Triggered Drive sync.", Toast.LENGTH_SHORT).show()
+                                                Toast.makeText(context, "Approved! Record appended to Doc.", Toast.LENGTH_SHORT).show()
                                             }
                                         }
                                     },
@@ -774,6 +774,8 @@ fun RecordsScreen(viewModel: SurveyViewModel) {
     val archivedUids by viewModel.archivedSurveyUids.collectAsState()
     val showHint by viewModel.showSwipeHintOverlay.collectAsState()
     val context = LocalContext.current
+    val userRole by viewModel.userRole.collectAsState()
+    val isMaster = userRole == Config.ROLE_MASTER || userRole == Config.ADMIN_ROLE
     var searchQuery by remember { mutableStateOf("") }
 
     val activeSurveys = surveys.filter { !archivedUids.contains(it.surveyUid) && it.participantName.contains(searchQuery, ignoreCase = true) }
@@ -819,19 +821,28 @@ fun RecordsScreen(viewModel: SurveyViewModel) {
                 items(activeSurveys, key = { it.surveyUid }) { s ->
                     SwipeableSurveyRecordCard(
                         survey = s,
+                        isMaster = isMaster,
                         onDelete = { viewModel.deleteSurvey(s) },
                         onArchive = { viewModel.archiveSurvey(s.surveyUid) },
-                        onRequestQa = {
-                            // Approve & Sync — sends full payload to Apps Script → Drive + Sheets
-                            viewModel.approveInstrument(s.surveyUid, "Approved by Master") { success ->
+                        onApprove = {
+                            // Master only: POST to Apps Script → appends to Google Doc → open Doc
+                            viewModel.approveInstrument(s.surveyUid, "Approved by Master") { success, docUrl ->
                                 if (success) {
-                                    Toast.makeText(context, "✓ Approved! Syncing to Google Drive & Sheets...", Toast.LENGTH_LONG).show()
+                                    Toast.makeText(context, "✓ Approved! Opening Google Doc...", Toast.LENGTH_LONG).show()
+                                    if (docUrl != null) {
+                                        val intent = android.content.Intent(
+                                            android.content.Intent.ACTION_VIEW,
+                                            android.net.Uri.parse(docUrl)
+                                        )
+                                        context.startActivity(intent)
+                                    }
                                 } else {
-                                    Toast.makeText(context, "Sync failed. Check network and try again.", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "Sync failed. Check network.", Toast.LENGTH_SHORT).show()
                                 }
                             }
                         },
-                        onShare = {
+                        onView = {
+                            // Any user: share via email
                             val subject = "CivicAge Survey Response - ${s.participantName}"
                             val body = viewModel.buildDetailedReportText(s)
                             shareSurveyReportViaEmail(context, body, subject)
@@ -846,10 +857,11 @@ fun RecordsScreen(viewModel: SurveyViewModel) {
 @Composable
 fun SwipeableSurveyRecordCard(
     survey: SurveyEntity,
+    isMaster: Boolean = false,
     onDelete: () -> Unit,
     onArchive: () -> Unit,
-    onRequestQa: () -> Unit,
-    onShare: () -> Unit
+    onApprove: () -> Unit = {},
+    onView: () -> Unit = {}
 ) {
     var offsetX by remember { mutableStateOf(0f) }
     val draggableState = rememberDraggableState { delta ->
@@ -862,29 +874,42 @@ fun SwipeableSurveyRecordCard(
         Column(modifier = Modifier.padding(16.dp)) {
             Text(survey.participantName.ifBlank { "Respondent Record" }, fontWeight = FontWeight.Bold)
             Text("Record ID: ${survey.surveyUid}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+            Text("Instrument: ${survey.instrumentType}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
             Spacer(modifier = Modifier.height(4.dp))
             Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
                 Text("Status: ${survey.status}", color = if (survey.status == "approved") GreenSuccess else OrangeWarning, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                Text("Accuracy: ${survey.gpsAccuracy.roundToInt()}m", fontSize = 12.sp, color = Color.Gray)
+                Text("GPS ±${survey.gpsAccuracy.roundToInt()}m", fontSize = 12.sp, color = Color.Gray)
             }
             Spacer(modifier = Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                // View button — visible to all users
                 OutlinedButton(
-                    onClick = onShare,
+                    onClick = onView,
                     modifier = Modifier.padding(end = 8.dp)
                 ) {
                     Text("View", fontSize = 12.sp)
                 }
-                Button(
-                    onClick = onRequestQa, // Triggers Approve in Master mode
-                    colors = ButtonDefaults.buttonColors(containerColor = GreenSuccess)
-                ) {
-                    Text(if (survey.status == "approved") "Approved" else "Approve & Sync", fontSize = 12.sp, color = Color.White)
+                // Approve button — Master only
+                if (isMaster) {
+                    Button(
+                        onClick = onApprove,
+                        enabled = survey.status != "approved",
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (survey.status == "approved") Color.Gray else GreenSuccess
+                        )
+                    ) {
+                        Text(
+                            if (survey.status == "approved") "✓ Approved" else "Approve & Doc",
+                            fontSize = 12.sp,
+                            color = Color.White
+                        )
+                    }
                 }
             }
         }
     }
 }
+
 
 @Composable
 fun InstrumentSelectorScreen(viewModel: SurveyViewModel, onNavigate: () -> Unit) {
