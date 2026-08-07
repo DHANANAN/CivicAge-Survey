@@ -16,7 +16,7 @@ class SurveyRepository(private val surveyDao: SurveyDao) {
     private val firestore = FirebaseFirestore.getInstance()
 
     companion object {
-        const val APPS_SCRIPT_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbw-V2Mkj_HVV08L6kjCGGl0HLwJ-z-INEI4XI6tx4N8fO3nGX51-gV20yDpGgECSj4R/exec"
+        const val APPS_SCRIPT_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbykNlkRlKfV4QNXByWOgYaNQ2jXe4aGE72utOEZuj_wpmAsfl135cCBxF8mXdmoxR6VGQ/exec"
         const val DCA_SECRET_TOKEN = "DCA_SECRET_TOKEN_2026"
     }
 
