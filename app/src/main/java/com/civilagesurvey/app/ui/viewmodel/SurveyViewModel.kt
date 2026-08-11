@@ -43,13 +43,12 @@ class SurveyViewModel(
 
     fun startRealtimeFirestoreSync() {
         if (firestoreSyncListener != null) return
-        if (userRole.value == Config.ADMIN_ROLE) {
+        val role = userRole.value
+        if (role == Config.ROLE_MASTER || role == Config.ADMIN_ROLE) {
             val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
             firestoreSyncListener = firestore.collection("surveyResponses")
                 .addSnapshotListener { snapshots, e ->
-                    if (e != null) {
-                        return@addSnapshotListener
-                    }
+                    if (e != null) return@addSnapshotListener
                     if (snapshots != null) {
                         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
                             for (doc in snapshots.documentChanges) {
@@ -79,7 +78,7 @@ class SurveyViewModel(
     val userRole = MutableStateFlow(Config.ROLE_NORMAL)
     val allowedPushToDrive = MutableStateFlow(true)
     val isMasterAuthenticated = MutableStateFlow(false)
-    val showSwipeHintOverlay = MutableStateFlow(true)
+    val showSwipeHintOverlay = MutableStateFlow(false) // swipe tips permanently disabled v3.2
     val archivedSurveyUids = MutableStateFlow<Set<String>>(emptySet())
 
     // Participant & Caregiver Profile Flows
@@ -274,17 +273,14 @@ class SurveyViewModel(
         createAccount: Boolean,
         onResult: (Boolean, String) -> Unit
     ) {
-        // Simple local login logic as requested
         val resolvedEmail = email.trim().lowercase()
         val role = Config.roleForEmail(resolvedEmail)
-        
         surveyorEmail.value = resolvedEmail
         surveyorName.value = fullName.trim()
         surveyorId.value = surveyorCode.trim()
         surveyorPhone.value = mobileNumber.trim()
         userRole.value = role
         activeUserUid.value = "LOCAL-${surveyorCode.trim()}"
-
         prefs.edit()
             .putString("surveyorEmail", resolvedEmail)
             .putString("surveyorName", surveyorName.value)
@@ -292,10 +288,71 @@ class SurveyViewModel(
             .putString("surveyorPhone", surveyorPhone.value)
             .putString("userRole", role)
             .apply()
+        startRealtimeFirestoreSync()
+        onResult(true, "Signed in locally as $role")
+    }
+
+    /**
+     * v3.2: Simplified ID+Password login for 25 Normal accounts + Master.
+     * No email required.
+     */
+    fun signInWithIdPassword(
+        id: String,
+        password: String,
+        displayName: String,
+        onResult: (Boolean, String) -> Unit
+    ) {
+        val cleanId = id.trim().uppercase()
+        val role = Config.loginWithIdPassword(cleanId, password)
+
+        if (role == null) {
+            onResult(false, "Invalid ID or password")
+            return
+        }
+
+        val finalName = displayName.trim().ifBlank {
+            if (role == Config.ROLE_MASTER) "Master Administrator" else "Field Surveyor $cleanId"
+        }
+
+        surveyorId.value = cleanId
+        surveyorName.value = finalName
+        surveyorEmail.value = "$cleanId@scsc.app"
+        userRole.value = role
+        activeUserUid.value = "LOCAL-$cleanId"
+
+        if (role == Config.ROLE_MASTER) {
+            isMasterAuthenticated.value = true
+        }
+
+        prefs.edit()
+            .putString("surveyorId", cleanId)
+            .putString("surveyorName", finalName)
+            .putString("surveyorEmail", "$cleanId@scsc.app")
+            .putString("surveyorPhone", "")
+            .putString("userRole", role)
+            .apply()
 
         startRealtimeFirestoreSync()
+        onResult(true, "Signed in as $role ($cleanId)")
+    }
 
-        onResult(true, "Signed in locally as $role")
+    /**
+     * v3.2: Allow any logged-in user to switch to Master role by entering the master password.
+     * No biometrics, no re-auth — just password check.
+     */
+    fun switchToMasterRole(password: String): Boolean {
+        if (password.trim() != Config.MASTER_PASSWORD) return false
+
+        userRole.value = Config.ROLE_MASTER
+        isMasterAuthenticated.value = true
+
+        prefs.edit().putString("userRole", Config.ROLE_MASTER).apply()
+
+        // Restart Firestore sync as Master to pull all global records
+        stopRealtimeFirestoreSync()
+        startRealtimeFirestoreSync()
+
+        return true
     }
 
     fun useLocalTestingMode(email: String, fullName: String, surveyorCode: String, mobileNumber: String) {

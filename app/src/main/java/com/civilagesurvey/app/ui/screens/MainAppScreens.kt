@@ -319,105 +319,116 @@ fun MainSurveyApp(viewModel: SurveyViewModel) {
 
 @Composable
 fun LoginScreen(viewModel: SurveyViewModel, onLogin: () -> Unit) {
-    var email by remember { mutableStateOf(viewModel.surveyorEmail.value) }
+    var name     by remember { mutableStateOf("") }
+    var id       by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
-    var name by remember { mutableStateOf(viewModel.surveyorName.value) }
-    var id by remember { mutableStateOf(viewModel.surveyorId.value) }
-    var phone by remember { mutableStateOf(viewModel.surveyorPhone.value) }
-    val context = LocalContext.current
+    val context  = LocalContext.current
 
-    val brightText = Color(0xFF111827)
     val inputColors = OutlinedTextFieldDefaults.colors(
-        focusedTextColor = Color.Black,
-        unfocusedTextColor = Color.Black,
-        focusedLabelColor = Color(0xFF1E3A8A),
-        unfocusedLabelColor = Color(0xFF374151),
-        focusedBorderColor = Color(0xFF1E3A8A),
-        unfocusedBorderColor = Color(0xFF4B5563),
-        focusedContainerColor = Color.White,
-        unfocusedContainerColor = Color.White
+        focusedTextColor       = Color.Black,
+        unfocusedTextColor     = Color.Black,
+        focusedLabelColor      = Color(0xFF1E3A8A),
+        unfocusedLabelColor    = Color(0xFF374151),
+        focusedBorderColor     = Color(0xFF1E3A8A),
+        unfocusedBorderColor   = Color(0xFF4B5563),
+        focusedContainerColor  = Color.White,
+        unfocusedContainerColor= Color.White
     )
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.White)
-            .padding(24.dp)
+            .padding(horizontal = 28.dp)
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Icon(Icons.Default.LocationCity, contentDescription = null, modifier = Modifier.size(64.dp), tint = Color(0xFF1E3A8A))
+        Spacer(modifier = Modifier.height(40.dp))
+        Icon(
+            Icons.Default.LocationCity,
+            contentDescription = null,
+            modifier = Modifier.size(72.dp),
+            tint = Color(0xFF1E3A8A)
+        )
         Spacer(modifier = Modifier.height(12.dp))
-        Text("DCA", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.ExtraBold, color = Color.Black)
-        Text("Smart Cities Responsible Citizens Initiative", style = MaterialTheme.typography.titleMedium, color = Color(0xFF1E3A8A))
-        Spacer(modifier = Modifier.height(24.dp))
+        Text(
+            "DCA",
+            style = MaterialTheme.typography.headlineLarge,
+            fontWeight = FontWeight.ExtraBold,
+            color = Color.Black
+        )
+        Text(
+            "Smart Cities Responsible Citizens",
+            style = MaterialTheme.typography.bodyMedium,
+            color = Color(0xFF1E3A8A),
+            textAlign = TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(36.dp))
 
-        Text("Surveyor & Role Login", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = brightText)
-        Spacer(modifier = Modifier.height(12.dp))
-
+        // Name (optional)
         OutlinedTextField(
-            value = email,
-            onValueChange = { email = it },
-            label = { Text("Email / Username *") },
+            value = name,
+            onValueChange = { name = it },
+            label = { Text("Name (optional)") },
+            singleLine = true,
             colors = inputColors,
             modifier = Modifier.fillMaxWidth()
         )
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // ID (required)
+        OutlinedTextField(
+            value = id,
+            onValueChange = { id = it },
+            label = { Text("Surveyor ID  e.g. SC0101") },
+            singleLine = true,
+            colors = inputColors,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // Password (required)
         OutlinedTextField(
             value = password,
             onValueChange = { password = it },
-            label = { Text("Password *") },
+            label = { Text("Password") },
+            singleLine = true,
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             colors = inputColors,
             modifier = Modifier.fillMaxWidth()
         )
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Text("Optional Surveyor Profile Info", style = MaterialTheme.typography.bodyMedium, color = Color(0xFF374151))
-        Spacer(modifier = Modifier.height(8.dp))
-        OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Surveyor Full Name") }, colors = inputColors, modifier = Modifier.fillMaxWidth())
-        Spacer(modifier = Modifier.height(12.dp))
-        OutlinedTextField(value = id, onValueChange = { id = it }, label = { Text("Surveyor ID / FI Code") }, colors = inputColors, modifier = Modifier.fillMaxWidth())
-        Spacer(modifier = Modifier.height(12.dp))
-        OutlinedTextField(value = phone, onValueChange = { phone = it }, label = { Text("Surveyor Phone") }, colors = inputColors, modifier = Modifier.fillMaxWidth())
-
         Spacer(modifier = Modifier.height(32.dp))
+
         Button(
             onClick = {
-                val cleanEmail = email.trim().lowercase()
-                if (cleanEmail == "scscdata@gmail.com" || cleanEmail == "scscpdata@gmail.com") {
-                    if (password == "SCSCD@2026" || password == "Scscd@2026") {
-                        val finalName = name.ifBlank { "Master Administrator" }
-                        val finalId = id.ifBlank { "SCSC-MASTER" }
-                        viewModel.signInOrSignUp(cleanEmail, "", finalName, finalId, phone, false) { _, _ -> onLogin() }
+                val trimId = id.trim()
+                val trimPass = password.trim()
+                if (trimId.isBlank()) {
+                    Toast.makeText(context, "Please enter your Surveyor ID", Toast.LENGTH_SHORT).show()
+                    return@Button
+                }
+                if (trimPass.isBlank()) {
+                    Toast.makeText(context, "Please enter your password", Toast.LENGTH_SHORT).show()
+                    return@Button
+                }
+                viewModel.signInWithIdPassword(trimId, trimPass, name) { success, msg ->
+                    if (success) {
+                        onLogin()
                     } else {
-                        Toast.makeText(context, "Incorrect password for Master Role", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                     }
-                } else if (cleanEmail == "scscqa@gmail.com" || cleanEmail == "qa") {
-                    if (password == "SCSC2026" || password == "Scscd@2026") {
-                        val finalName = name.ifBlank { "QA Reviewer" }
-                        val finalId = id.ifBlank { "SCSC-QA" }
-                        viewModel.signInOrSignUp("scscqa@gmail.com", "", finalName, finalId, phone, false) { _, _ -> onLogin() }
-                    } else {
-                        Toast.makeText(context, "Incorrect password for QA Role", Toast.LENGTH_SHORT).show()
-                    }
-                } else if (cleanEmail == "scsc1" || cleanEmail.isNotBlank()) {
-                    val finalName = name.ifBlank { "Field Surveyor 1" }
-                    val finalId = id.ifBlank { "SCSC-NORMAL" }
-                    val loginEmail = if (cleanEmail == "scsc1") "scsc1@civilagesurvey.app" else cleanEmail
-                    viewModel.signInOrSignUp(loginEmail, "", finalName, finalId, phone, false) { _, _ -> onLogin() }
-                } else {
-                    Toast.makeText(context, "Please enter email or username", Toast.LENGTH_SHORT).show()
                 }
             },
-            modifier = Modifier.fillMaxWidth().height(56.dp)
+            modifier = Modifier.fillMaxWidth().height(54.dp)
         ) {
-            Text("Access Dashboard", fontWeight = FontWeight.Bold)
+            Text("Access Dashboard", fontWeight = FontWeight.Bold, fontSize = 16.sp)
         }
+        Spacer(modifier = Modifier.height(40.dp))
     }
 }
+
 
 @Composable
 fun HomeScreen(viewModel: SurveyViewModel, onNavigate: (String) -> Unit) {
@@ -652,70 +663,56 @@ fun QADashboardScreen(viewModel: SurveyViewModel) {
 fun MasterControlScreen(viewModel: SurveyViewModel) {
     val isAuth by viewModel.isMasterAuthenticated.collectAsState()
     val context = LocalContext.current
-    val activity = context as? FragmentActivity
     var passwordInput by remember { mutableStateOf("") }
 
     if (!isAuth) {
         Column(
-            modifier = Modifier.fillMaxSize().padding(24.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(28.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.primary)
+            Icon(
+                Icons.Default.AdminPanelSettings,
+                contentDescription = null,
+                modifier = Modifier.size(72.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
             Spacer(modifier = Modifier.height(16.dp))
-            Text("Master Authentication Required", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Text("Re-authenticate using Biometric unlock or Master password", style = MaterialTheme.typography.bodyMedium, color = Color.Gray, textAlign = TextAlign.Center)
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Button(
-                onClick = {
-                    if (activity != null) {
-                        val bioHelper = BiometricAuthHelper(activity)
-                        if (bioHelper.canAuthenticate()) {
-                            bioHelper.authenticate(
-                                onSuccess = {
-                                    viewModel.isMasterAuthenticated.value = true
-                                    Toast.makeText(context, "Biometric authentication successful", Toast.LENGTH_SHORT).show()
-                                },
-                                onError = { err ->
-                                    Toast.makeText(context, err, Toast.LENGTH_SHORT).show()
-                                }
-                            )
-                        } else {
-                            Toast.makeText(context, "Biometric unlock unavailable. Use password below.", Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(Icons.Default.Fingerprint, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Biometric / Face Unlock")
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-            Text("OR", fontSize = 12.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                "Master Access",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                "Enter the Master password to switch your session to Master role. This gives you full record review and approval access across all devices.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.Gray,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(28.dp))
 
             OutlinedTextField(
                 value = passwordInput,
                 onValueChange = { passwordInput = it },
                 label = { Text("Master Password") },
                 visualTransformation = PasswordVisualTransformation(),
+                singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(modifier = Modifier.height(16.dp))
             Button(
                 onClick = {
-                    if (viewModel.verifyMasterPassword(passwordInput)) {
-                        Toast.makeText(context, "Master access granted", Toast.LENGTH_SHORT).show()
+                    if (viewModel.switchToMasterRole(passwordInput)) {
+                        Toast.makeText(context, "✓ Master role activated! Fetching all records...", Toast.LENGTH_LONG).show()
                     } else {
-                        Toast.makeText(context, "Invalid Master password", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Incorrect password", Toast.LENGTH_SHORT).show()
                     }
                 },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth().height(52.dp)
             ) {
-                Text("Authenticate Password")
+                Text("Switch to Master Role", fontWeight = FontWeight.Bold)
             }
         }
     } else {
@@ -733,13 +730,10 @@ fun MasterControlScreen(viewModel: SurveyViewModel) {
                     Text("Local Wi-Fi Data Sync Tunnel Server", fontWeight = FontWeight.Bold)
                     val isServerRunning by viewModel.isSyncServerRunning.collectAsState()
                     val serverStatus by viewModel.syncServerStatus.collectAsState()
-
                     Text("Server Status: $serverStatus", color = if (isServerRunning) GreenSuccess else Color.Gray)
                     Spacer(modifier = Modifier.height(8.dp))
                     Button(
-                        onClick = {
-                            if (isServerRunning) viewModel.stopSyncServer() else viewModel.startSyncServer()
-                        },
+                        onClick = { if (isServerRunning) viewModel.stopSyncServer() else viewModel.startSyncServer() },
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(if (isServerRunning) "Stop Sync Server" else "Start Sync Server")
@@ -768,6 +762,7 @@ fun MasterControlScreen(viewModel: SurveyViewModel) {
     }
 }
 
+
 @Composable
 fun RecordsScreen(viewModel: SurveyViewModel) {
     val surveys by viewModel.filteredSurveys.collectAsState()
@@ -781,29 +776,7 @@ fun RecordsScreen(viewModel: SurveyViewModel) {
     val activeSurveys = surveys.filter { !archivedUids.contains(it.surveyUid) && it.participantName.contains(searchQuery, ignoreCase = true) }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        if (showHint) {
-            Surface(
-                color = MaterialTheme.colorScheme.primaryContainer,
-                shape = RoundedCornerShape(8.dp),
-                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
-            ) {
-                Row(
-                    modifier = Modifier.padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Default.Swipe, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        "Hint: Swipe LEFT to Share/View details. Swipe RIGHT to Archive or Delete.",
-                        fontSize = 12.sp,
-                        modifier = Modifier.weight(1f)
-                    )
-                    IconButton(onClick = { viewModel.dismissSwipeHintOverlay() }) {
-                        Icon(Icons.Default.Close, contentDescription = "Dismiss", modifier = Modifier.size(16.dp))
-                    }
-                }
-            }
-        }
+
 
         OutlinedTextField(
             value = searchQuery,
@@ -1216,26 +1189,25 @@ fun SettingsScreen(viewModel: SurveyViewModel, onNavigateMasterControl: () -> Un
             }
         }
 
-        if (userRole == Config.ROLE_MASTER || userRole == Config.ADMIN_ROLE) {
-            Spacer(modifier = Modifier.height(24.dp))
-            Text("Advanced", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-            Spacer(modifier = Modifier.height(8.dp))
+        // Master Control Panel - accessible to ALL users to allow role switching
+        Spacer(modifier = Modifier.height(24.dp))
+        Text("Advanced", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+        Spacer(modifier = Modifier.height(8.dp))
 
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onNavigateMasterControl() },
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f))
-            ) {
-                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Security, contentDescription = null, tint = RedError)
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Master Control Panel", fontWeight = FontWeight.Bold)
-                        Text("Requires Biometric or Password unlock", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                    }
-                    Icon(Icons.AutoMirrored.Filled.ArrowForwardIos, contentDescription = null, modifier = Modifier.size(16.dp))
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onNavigateMasterControl() },
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f))
+        ) {
+            Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.AdminPanelSettings, contentDescription = null, tint = RedError)
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Master Control Panel", fontWeight = FontWeight.Bold)
+                    Text("Enter master password to switch to Master role", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                 }
+                Icon(Icons.AutoMirrored.Filled.ArrowForwardIos, contentDescription = null, modifier = Modifier.size(16.dp))
             }
         }
     }

@@ -128,21 +128,37 @@ class SurveyRepository(private val surveyDao: SurveyDao) {
     suspend fun syncRecordToFirestore(survey: SurveyEntity): Boolean {
         return try {
             val recordMap = mutableMapOf<String, Any>(
+                "surveyUid" to survey.surveyUid,
                 "recordId" to survey.surveyUid,
+                "surveyorId" to survey.surveyorId,
                 "userId" to survey.surveyorId,
+                "surveyorName" to survey.surveyorName,
                 "displayName" to survey.surveyorName,
+                "participantName" to survey.participantName,
                 "city" to survey.city,
                 "instrumentType" to survey.instrumentType,
+                "latitude" to survey.latitude,
+                "longitude" to survey.longitude,
                 "geoLat" to survey.latitude,
                 "geoLng" to survey.longitude,
+                "gpsAccuracy" to survey.gpsAccuracy,
                 "geoAccuracy" to survey.gpsAccuracy,
                 "geoTimestamp" to survey.geoTimestamp,
                 "consentGiven" to survey.consentGiven,
                 "status" to survey.status,
+                "answersJson" to (survey.answersJson ?: ""),
                 "answers" to (survey.answersJson ?: ""),
                 "createdAt" to survey.createdAt,
-                "updatedAt" to survey.updatedAt
+                "updatedAt" to survey.updatedAt,
+                "isSynced" to survey.isSynced,
+                "createdBy" to survey.createdBy
             )
+            // Write to surveyResponses — picked up by Master real-time listener
+            firestore.collection("surveyResponses")
+                .document(survey.surveyUid)
+                .set(recordMap, SetOptions.merge())
+                .await()
+            // Also update records collection for approval queries
             firestore.collection("records")
                 .document(survey.surveyUid)
                 .set(recordMap, SetOptions.merge())
