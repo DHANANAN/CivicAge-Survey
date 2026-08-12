@@ -18,8 +18,30 @@ class SurveyRepository(private val surveyDao: SurveyDao) {
     companion object {
         const val APPS_SCRIPT_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwjwjTFr35YP13Luz1p3mODf3t9WV3SCUGF0cW9taVQ76zqZHan6OR3piVxQZB8ogcx/exec"
         const val DCA_SECRET_TOKEN = "DCA_SECRET_TOKEN_2026"
+        // Fallback / common doc (SC0113+ and unrecognised IDs)
         const val GOOGLE_DOC_URL = "https://docs.google.com/document/d/10U1MCP3_neriSMV47ch7OAD15Ev2FgtQjLW8svfXraQ/edit"
+
+        /** Per-user dedicated docs for SC0101–SC0112 (matches Apps Script routing). */
+        val USER_DOC_URL_MAP: Map<String, String> = mapOf(
+            "SC0101" to "https://docs.google.com/document/d/1wdTMizfwXXqYpsy5NPxYCug-I7vRACsWZZZ7KmtWF3w/edit",
+            "SC0102" to "https://docs.google.com/document/d/1Munad_OGvWbRuav4VfeK9KKXHVEYBAkAhpo0hRfVGzo/edit",
+            "SC0103" to "https://docs.google.com/document/d/1WINw7vf7QfoufrYBVpM8200xX1R7u2QOIMcByX6yhok/edit",
+            "SC0104" to "https://docs.google.com/document/d/1Lb7_4ZhSGTjIiaonoiCXF6IYd4stNHPYEqCRtHCGZ6M/edit",
+            "SC0105" to "https://docs.google.com/document/d/1wXeElRpfh8scbRIgAGuqxhHt-gM6a_CViqM-05TDhaw/edit",
+            "SC0106" to "https://docs.google.com/document/d/1uay6xdP1luqggV141ywnYy9ibAXIGkPrfCYmu0ENnvY/edit",
+            "SC0107" to "https://docs.google.com/document/d/1QGHiZyEmALLSYfCPbO8smupd3_FKKTFGcx0Tfm8YEzA/edit",
+            "SC0108" to "https://docs.google.com/document/d/1TaWWC9xLOY1pJW4QXSjXOA9Ml89CKzD1VS_THRQAKZk/edit",
+            "SC0109" to "https://docs.google.com/document/d/1F5HJ0rUOunJqOb7dipPyUFSyt2L0lgtjZHFxbtTahxA/edit",
+            "SC0110" to "https://docs.google.com/document/d/1LfTkNS2UEVNGQMkv1FPrp4uuPK3NxOBLFhJuiD64i_M/edit",
+            "SC0111" to "https://docs.google.com/document/d/1rXfwAA5EacdrUr_ygMo4M9-n3ugydPYkkQ3IO_lAyR0/edit",
+            "SC0112" to "https://docs.google.com/document/d/1RkN84SXU1_HH_Cny_KSi4-_lOy5FwmRWp7095KbdgoQ/edit"
+        )
+
+        /** Returns the target Google Doc URL for the given surveyor ID. */
+        fun docUrlForUser(userId: String): String =
+            USER_DOC_URL_MAP[userId.trim().uppercase()] ?: GOOGLE_DOC_URL
     }
+
 
     val allSurveys: Flow<List<SurveyEntity>> = surveyDao.getAllSurveys()
     val allPushRequests: Flow<List<PushRequestEntity>> = surveyDao.getAllPushRequests()

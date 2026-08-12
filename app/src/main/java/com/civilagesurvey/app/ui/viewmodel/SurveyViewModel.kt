@@ -1413,20 +1413,24 @@ class SurveyViewModel(
             )
             com.civilagesurvey.app.telemetry.TelemetryManager.logQaAction(surveyUid, "approve", surveyorEmail.value)
 
-            // Post to Apps Script → appends to Google Doc
+            // Post to Apps Script → routes to the correct per-user Google Doc
             var docUrl: String? = null
             if (success) {
                 val survey = repository.getSurveyById(surveyUid)
                 if (survey != null) {
+                    // Resolve the right doc URL for this surveyor's ID (v3.3 routing)
+                    val targetDocUrl = com.civilagesurvey.app.data.repository.SurveyRepository
+                        .docUrlForUser(survey.surveyorId)
                     docUrl = kotlin.runCatching {
                         repository.postRecordToAppsScript(survey)
-                        "https://docs.google.com/document/d/10U1MCP3_neriSMV47ch7OAD15Ev2FgtQjLW8svfXraQ/edit"
+                        targetDocUrl
                     }.getOrNull()
                 }
             }
             onResult(success, docUrl)
         }
     }
+
 
     fun rejectInstrument(surveyUid: String, qaNotes: String, onResult: (Boolean) -> Unit) {
         viewModelScope.launch {
