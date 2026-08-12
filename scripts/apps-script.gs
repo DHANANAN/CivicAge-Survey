@@ -1,14 +1,14 @@
 /**
  * DCA Cloud Sync - Google Doc Appender v3.3
+ * Deployed Web App URL: https://script.google.com/macros/s/AKfycbwQ0C5ZiRV8FEJjnNlYMYvhqA91YLu35U8uzYI2zISm7PL8hQFX7D48BT2zboJmjQfLLg/exec
  * Routing: SC0101–SC0112 → each user's own dedicated Google Doc
  *          All other IDs  → common fallback Doc
  *
- * HOW TO DEPLOY:
+ * HOW TO RE-DEPLOY:
  * 1. Open https://script.google.com and open your SCSCD project
  * 2. Select ALL existing code (Ctrl+A) and REPLACE with this file
  * 3. Save (Ctrl+S)
  * 4. Click Deploy → Manage deployments → pencil icon → New Version → Deploy
- * 5. Copy the Web App URL → paste into SurveyRepository.kt as APPS_SCRIPT_WEB_APP_URL
  *
  * Token used by the mobile app: DCA_SECRET_TOKEN_2026
  */
