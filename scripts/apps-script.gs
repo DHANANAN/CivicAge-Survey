@@ -1,149 +1,67 @@
 /**
- * DCA Cloud Sync - Google Doc Appender v3.3
- * Deployed Web App URL: https://script.google.com/macros/s/AKfycbwQ0C5ZiRV8FEJjnNlYMYvhqA91YLu35U8uzYI2zISm7PL8hQFX7D48BT2zboJmjQfLLg/exec
- * Routing: SC0101–SC0112 → each user's own dedicated Google Doc
- *          All other IDs  → common fallback Doc
- *
- * HOW TO RE-DEPLOY:
- * 1. Open https://script.google.com and open your SCSCD project
- * 2. Select ALL existing code (Ctrl+A) and REPLACE with this file
- * 3. Save (Ctrl+S)
- * 4. Click Deploy → Manage deployments → pencil icon → New Version → Deploy
- *
- * Token used by the mobile app: DCA_SECRET_TOKEN_2026
+ * DCA Cloud Sync - Google Doc Appender v3.4 (Fixed)
+ * URL: https://script.google.com/macros/s/AKfycbwQ0C5ZiRV8FEJjnNlYMYvhqA91YLu35U8uzYI2zISm7PL8hQFX7D48BT2zboJmjQfLLg/exec
+ * Token: DCA_SECRET_TOKEN_2026
+ * REDEPLOY: Deploy > Manage > pencil > New Version > Deploy
+ * TEST: select testWrite() then Run
  */
 
-// ─── Common / fallback doc (used for SC0113+ and any unrecognized IDs) ─────────
-const COMMON_DOC_ID  = "10U1MCP3_neriSMV47ch7OAD15Ev2FgtQjLW8svfXraQ";
-const COMMON_DOC_URL = "https://docs.google.com/document/d/10U1MCP3_neriSMV47ch7OAD15Ev2FgtQjLW8svfXraQ/edit";
-const SECRET_TOKEN   = "DCA_SECRET_TOKEN_2026";
-
-// ─── Per-user Doc routing map (SC0101 – SC0112) ───────────────────────────────
+const COMMON_DOC_ID = '10U1MCP3_neriSMV47ch7OAD15Ev2FgtQjLW8svfXraQ';
+const SECRET_TOKEN  = 'DCA_SECRET_TOKEN_2026';
 const USER_DOC_MAP = {
-  "SC0101": { id: "1wdTMizfwXXqYpsy5NPxYCug-I7vRACsWZZZ7KmtWF3w",
-               url: "https://docs.google.com/document/d/1wdTMizfwXXqYpsy5NPxYCug-I7vRACsWZZZ7KmtWF3w/edit" },
-  "SC0102": { id: "1Munad_OGvWbRuav4VfeK9KKXHVEYBAkAhpo0hRfVGzo",
-               url: "https://docs.google.com/document/d/1Munad_OGvWbRuav4VfeK9KKXHVEYBAkAhpo0hRfVGzo/edit" },
-  "SC0103": { id: "1WINw7vf7QfoufrYBVpM8200xX1R7u2QOIMcByX6yhok",
-               url: "https://docs.google.com/document/d/1WINw7vf7QfoufrYBVpM8200xX1R7u2QOIMcByX6yhok/edit" },
-  "SC0104": { id: "1Lb7_4ZhSGTjIiaonoiCXF6IYd4stNHPYEqCRtHCGZ6M",
-               url: "https://docs.google.com/document/d/1Lb7_4ZhSGTjIiaonoiCXF6IYd4stNHPYEqCRtHCGZ6M/edit" },
-  "SC0105": { id: "1wXeElRpfh8scbRIgAGuqxhHt-gM6a_CViqM-05TDhaw",
-               url: "https://docs.google.com/document/d/1wXeElRpfh8scbRIgAGuqxhHt-gM6a_CViqM-05TDhaw/edit" },
-  "SC0106": { id: "1uay6xdP1luqggV141ywnYy9ibAXIGkPrfCYmu0ENnvY",
-               url: "https://docs.google.com/document/d/1uay6xdP1luqggV141ywnYy9ibAXIGkPrfCYmu0ENnvY/edit" },
-  "SC0107": { id: "1QGHiZyEmALLSYfCPbO8smupd3_FKKTFGcx0Tfm8YEzA",
-               url: "https://docs.google.com/document/d/1QGHiZyEmALLSYfCPbO8smupd3_FKKTFGcx0Tfm8YEzA/edit" },
-  "SC0108": { id: "1TaWWC9xLOY1pJW4QXSjXOA9Ml89CKzD1VS_THRQAKZk",
-               url: "https://docs.google.com/document/d/1TaWWC9xLOY1pJW4QXSjXOA9Ml89CKzD1VS_THRQAKZk/edit" },
-  "SC0109": { id: "1F5HJ0rUOunJqOb7dipPyUFSyt2L0lgtjZHFxbtTahxA",
-               url: "https://docs.google.com/document/d/1F5HJ0rUOunJqOb7dipPyUFSyt2L0lgtjZHFxbtTahxA/edit" },
-  "SC0110": { id: "1LfTkNS2UEVNGQMkv1FPrp4uuPK3NxOBLFhJuiD64i_M",
-               url: "https://docs.google.com/document/d/1LfTkNS2UEVNGQMkv1FPrp4uuPK3NxOBLFhJuiD64i_M/edit" },
-  "SC0111": { id: "1rXfwAA5EacdrUr_ygMo4M9-n3ugydPYkkQ3IO_lAyR0",
-               url: "https://docs.google.com/document/d/1rXfwAA5EacdrUr_ygMo4M9-n3ugydPYkkQ3IO_lAyR0/edit" },
-  "SC0112": { id: "1RkN84SXU1_HH_Cny_KSi4-_lOy5FwmRWp7095KbdgoQ",
-               url: "https://docs.google.com/document/d/1RkN84SXU1_HH_Cny_KSi4-_lOy5FwmRWp7095KbdgoQ/edit" }
+  'SC0101': '1wdTMizfwXXqYpsy5NPxYCug-I7vRACsWZZZ7KmtWF3w',
+  'SC0102': '1Munad_OGvWbRuav4VfeK9KKXHVEYBAkAhpo0hRfVGzo',
+  'SC0103': '1WINw7vf7QfoufrYBVpM8200xX1R7u2QOIMcByX6yhok',
+  'SC0104': '1Lb7_4ZhSGTjIiaonoiCXF6IYd4stNHPYEqCRtHCGZ6M',
+  'SC0105': '1wXeElRpfh8scbRIgAGuqxhHt-gM6a_CViqM-05TDhaw',
+  'SC0106': '1uay6xdP1luqggV141ywnYy9ibAXIGkPrfCYmu0ENnvY',
+  'SC0107': '1QGHiZyEmALLSYfCPbO8smupd3_FKKTFGcx0Tfm8YEzA',
+  'SC0108': '1TaWWC9xLOY1pJW4QXSjXOA9Ml89CKzD1VS_THRQAKZk',
+  'SC0109': '1F5HJ0rUOunJqOb7dipPyUFSyt2L0lgtjZHFxbtTahxA',
+  'SC0110': '1LfTkNS2UEVNGQMkv1FPrp4uuPK3NxOBLFhJuiD64i_M',
+  'SC0111': '1rXfwAA5EacdrUr_ygMo4M9-n3ugydPYkkQ3IO_lAyR0',
+  'SC0112': '1RkN84SXU1_HH_Cny_KSi4-_lOy5FwmRWp7095KbdgoQ'
 };
 
-// ─── Entry point ───────────────────────────────────────────────────────────────
-function doPost(e) {
-  try {
-    var payload = JSON.parse(e.postData.contents);
+function doOptions(e){return ContentService.createTextOutput('').setMimeType(ContentService.MimeType.TEXT);}
 
-    if (payload.token !== SECRET_TOKEN) {
-      return json({ error: "Unauthorized" });
-    }
+function doGet(e){return json({status:'DCA v3.4 OK',docs:Object.keys(USER_DOC_MAP).length+' dedicated + 1 common'});}
 
-    // Resolve the target doc for this user
-    var userId   = (payload.userId || "").toUpperCase().trim();
-    var target   = USER_DOC_MAP[userId] || null;
-    var docId    = target ? target.id  : COMMON_DOC_ID;
-    var docUrl   = target ? target.url : COMMON_DOC_URL;
+function doPost(e){
+  try{
+    if(!e||!e.postData||!e.postData.contents)return json({success:false,error:'Empty body'});
+    var p=JSON.parse(e.postData.contents);
+    if(!p.token||p.token!==SECRET_TOKEN)return json({success:false,error:'Unauthorized'});
+    var uid=(p.userId||'').toUpperCase().trim();
+    var docId=USER_DOC_MAP[uid]||COMMON_DOC_ID;
+    writeToDoc(docId,p);
+    return json({success:true,docId:docId,recordId:p.recordId||'',routed:uid});
+  }catch(ex){return json({success:false,error:ex.toString()});}
+}
 
-    appendRecordToDoc(docId, payload);
-
-    return json({
-      success:  true,
-      docUrl:   docUrl,
-      routed:   target ? ("dedicated/" + userId) : "common",
-      recordId: payload.recordId
-    });
-
-  } catch (err) {
-    return json({ error: err.toString() });
+function writeToDoc(docId,p){
+  var doc=DocumentApp.openById(docId);
+  var body=doc.getBody();
+  var ts=Utilities.formatDate(new Date(),'Asia/Kolkata','dd-MMM-yyyy HH:mm:ss IST');
+  body.appendParagraph('================================================').setHeading(DocumentApp.ParagraphHeading.NORMAL);
+  body.appendParagraph('['+( p.instrumentType||'Survey')+']  '+(p.displayName||p.userId||'Unknown')+'  |  '+(p.city||'ND')+'  |  '+ts).setHeading(DocumentApp.ParagraphHeading.HEADING2);
+  body.appendParagraph('Record:  '+(p.recordId||'-')+'\nUser:    '+(p.userId||'-')+'\nGPS:     '+(p.geoLat||'0')+', '+(p.geoLng||'0')+' (+/-'+Math.round(p.geoAccuracy||0)+'m)\nConsent: '+(p.consentGiven?'YES':'NO')+'\nStatus:  '+(p.status||'approved')).setHeading(DocumentApp.ParagraphHeading.NORMAL);
+  var ans=p.answers;
+  if(ans){
+    body.appendParagraph('-- Responses --').setHeading(DocumentApp.ParagraphHeading.HEADING3);
+    if(typeof ans==='object'&&!Array.isArray(ans)){
+      var keys=Object.keys(ans);
+      for(var i=0;i<keys.length;i++){var v=ans[keys[i]];if(v!==null&&v!==undefined&&String(v).trim()!==''){body.appendParagraph('Q: '+keys[i]+'\nA: '+String(v)).setHeading(DocumentApp.ParagraphHeading.NORMAL);}}
+    }else if(typeof ans==='string'&&ans.trim().length>0){body.appendParagraph(ans);}
   }
+  body.appendParagraph(' ');
+  // NO saveAndClose()
 }
 
-// ─── Core: open doc and append formatted record ────────────────────────────────
-function appendRecordToDoc(docId, payload) {
-  var doc  = DocumentApp.openById(docId);
-  var body = doc.getBody();
-
-  var now     = new Date();
-  var dateStr = Utilities.formatDate(now, "Asia/Kolkata", "dd-MMM-yyyy HH:mm:ss");
-  var divider = "════════════════════════════════════════════════════════════";
-
-  body.appendParagraph(divider)
-      .setHeading(DocumentApp.ParagraphHeading.NORMAL);
-
-  // Header: instrument type | surveyor name | city | timestamp
-  var hdr = body.appendParagraph(
-    "📋 " + (payload.instrumentType || "Survey") +
-    "  |  " + (payload.displayName || payload.surveyorName || payload.userId || "Unknown") +
-    "  |  " + (payload.city || "ND") +
-    "  |  " + dateStr
-  );
-  hdr.setHeading(DocumentApp.ParagraphHeading.HEADING2);
-
-  // Meta block
-  body.appendParagraph(
-    "Record ID: " + (payload.recordId || "—") + "\n" +
-    "User ID:   " + (payload.userId   || "—") + "\n" +
-    "Surveyor:  " + (payload.surveyorName || payload.displayName || payload.userId || "—") + "\n" +
-    "Status:    " + (payload.status || "approved") + "\n" +
-    "GPS:       " + (payload.geoLat || "0") + ", " + (payload.geoLng || "0") +
-                    " (±" + Math.round(payload.geoAccuracy || 0) + "m)\n" +
-    "Consent:   " + (payload.consentGiven ? "YES ✓" : "NO ✗")
-  ).setHeading(DocumentApp.ParagraphHeading.NORMAL);
-
-  // Answers / responses
-  var answers = payload.answers;
-  if (answers && typeof answers === "object" && Object.keys(answers).length > 0) {
-    body.appendParagraph("── Responses ──")
-        .setHeading(DocumentApp.ParagraphHeading.HEADING3);
-    var keys = Object.keys(answers);
-    for (var i = 0; i < keys.length; i++) {
-      var k   = keys[i];
-      var val = answers[k];
-      if (val !== null && val !== undefined && String(val).trim() !== "") {
-        body.appendParagraph("Q: " + k + "\nA: " + String(val))
-            .setHeading(DocumentApp.ParagraphHeading.NORMAL);
-      }
-    }
-  } else if (typeof answers === "string" && answers.length > 0) {
-    // Raw JSON string fallback
-    body.appendParagraph("── Responses ──")
-        .setHeading(DocumentApp.ParagraphHeading.HEADING3);
-    body.appendParagraph(answers);
-  }
-
-  body.appendParagraph(" ");
-  doc.saveAndClose();
+function testWrite(){
+  var p={token:'DCA_SECRET_TOKEN_2026',recordId:'TEST-'+Date.now(),userId:'SC0101',displayName:'Test User',city:'Nagpur',instrumentType:'Test Survey',geoLat:'21.14',geoLng:'79.08',geoAccuracy:5,consentGiven:true,status:'approved',answers:{'Question 1':'Answer A','Question 2':'Answer B'}};
+  writeToDoc(USER_DOC_MAP[p.userId]||COMMON_DOC_ID,p);
+  Logger.log('Done. Check SC0101 doc.');
 }
 
-// ─── Health-check GET ─────────────────────────────────────────────────────────
-function doGet(e) {
-  return json({
-    status:  "DCA Doc Appender v3.3",
-    routing: "SC0101-SC0112 → dedicated docs | others → common doc",
-    commonDocId: COMMON_DOC_ID
-  });
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-function json(obj) {
-  return ContentService
-    .createTextOutput(JSON.stringify(obj))
-    .setMimeType(ContentService.MimeType.JSON);
-}
+function json(obj){return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);}

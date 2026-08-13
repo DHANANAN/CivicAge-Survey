@@ -8,9 +8,9 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
-import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
+
 
 class SurveyRepository(private val surveyDao: SurveyDao) {
     private val firestore = FirebaseFirestore.getInstance()
@@ -214,29 +214,56 @@ class SurveyRepository(private val surveyDao: SurveyDao) {
                 .put("status", survey.status)
                 .put("answers", answersObj)
 
-            val url = URL(APPS_SCRIPT_WEB_APP_URL)
-            val connection = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
-                doOutput = true
-                instanceFollowRedirects = true
-                setRequestProperty("Content-Type", "application/json; charset=UTF-8")
-                connectTimeout = 15000
-                readTimeout = 15000
+            val body = payload.toString()
+
+            /**
+             * Apps Script Web Apps always return HTTP 302 → real execution URL.
+             * Android's HttpURLConnection drops the POST body on auto-redirect.
+             * Fix: disable instanceFollowRedirects, read Location header from 302,
+             * then POST again to that URL with the full body.
+             */
+            fun openPost(targetUrl: String): HttpURLConnection =
+                (URL(targetUrl).openConnection() as HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    doOutput = true
+                    instanceFollowRedirects = false // MUST be false
+                    setRequestProperty("Content-Type", "application/json; charset=UTF-8")
+                    setRequestProperty("Accept", "application/json")
+                    connectTimeout = 20000
+                    readTimeout    = 20000
+                }
+
+            // First POST → likely a 302
+            var conn = openPost(APPS_SCRIPT_WEB_APP_URL)
+            conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+            var code = conn.responseCode
+
+            if (code in 300..399) {
+                // Follow the redirect, re-sending the POST body
+                val location = conn.getHeaderField("Location") ?: ""
+                conn.disconnect()
+                if (location.isNotBlank()) {
+                    conn = openPost(location)
+                    conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+                    code = conn.responseCode
+                }
             }
 
-            OutputStreamWriter(connection.outputStream).use { writer ->
-                writer.write(payload.toString())
-                writer.flush()
-            }
+            val resp = try {
+                (conn.inputStream ?: conn.errorStream)?.bufferedReader()?.readText() ?: ""
+            } catch (e: Exception) { "" }
+            conn.disconnect()
 
-            val responseCode = connection.responseCode
-            connection.disconnect()
+            android.util.Log.d("DCA_POST", "HTTP $code → $resp")
+            code in 200..299
 
-            responseCode in 200..309
+
         } catch (e: Exception) {
+            android.util.Log.e("DCA_POST", "postRecordToAppsScript failed: ${e.message}")
             false
         }
     }
+
 
     suspend fun saveConsentRecord(surveyUid: String, consent: Map<String, Any>): Boolean {
         return try {
