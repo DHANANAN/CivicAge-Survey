@@ -42,7 +42,7 @@ function doPost(e){
 function writeToDoc(docId,p){
   var doc=DocumentApp.openById(docId);
   var body=doc.getBody();
-  var ts=Utilities.formatDate(new Date(),'Asia/Kolkata','dd-MMM-yyyy HH:mm:ss IST');
+  var ts=Utilities.formatDate(new Date(),'Asia/Kolkata',"dd-MMM-yyyy HH:mm:ss 'IST'");
   body.appendParagraph('================================================').setHeading(DocumentApp.ParagraphHeading.NORMAL);
   body.appendParagraph('['+( p.instrumentType||'Survey')+']  '+(p.displayName||p.userId||'Unknown')+'  |  '+(p.city||'ND')+'  |  '+ts).setHeading(DocumentApp.ParagraphHeading.HEADING2);
   body.appendParagraph('Record:  '+(p.recordId||'-')+'\nUser:    '+(p.userId||'-')+'\nGPS:     '+(p.geoLat||'0')+', '+(p.geoLng||'0')+' (+/-'+Math.round(p.geoAccuracy||0)+'m)\nConsent: '+(p.consentGiven?'YES':'NO')+'\nStatus:  '+(p.status||'approved')).setHeading(DocumentApp.ParagraphHeading.NORMAL);
