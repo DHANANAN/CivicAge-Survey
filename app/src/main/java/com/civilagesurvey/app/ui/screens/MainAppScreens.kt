@@ -324,6 +324,10 @@ fun LoginScreen(viewModel: SurveyViewModel, onLogin: () -> Unit) {
     var password by remember { mutableStateOf("") }
     val context  = LocalContext.current
 
+    // v3.4: Master login from login screen
+    var showMasterLogin by remember { mutableStateOf(false) }
+    var masterPassword  by remember { mutableStateOf("") }
+
     val inputColors = OutlinedTextFieldDefaults.colors(
         focusedTextColor       = Color.Black,
         unfocusedTextColor     = Color.Black,
@@ -425,6 +429,76 @@ fun LoginScreen(viewModel: SurveyViewModel, onLogin: () -> Unit) {
         ) {
             Text("Access Dashboard", fontWeight = FontWeight.Bold, fontSize = 16.sp)
         }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // ── v3.4: Master Login from Login Screen ───────────────────────────
+        OutlinedButton(
+            onClick = { showMasterLogin = !showMasterLogin },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF7C3AED))
+        ) {
+            Icon(
+                Icons.Default.AdminPanelSettings,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(if (showMasterLogin) "Cancel Master Login" else "Login as Master")
+        }
+
+        if (showMasterLogin) {
+            Spacer(modifier = Modifier.height(16.dp))
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color(0xFFF3E8FF)
+                ),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF7C3AED))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        "Master Access",
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF5B21B6)
+                    )
+                    Text(
+                        "Enter the Master password to log in with full record review and approval access.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF6D28D9)
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = masterPassword,
+                        onValueChange = { masterPassword = it },
+                        label = { Text("Master Password") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Button(
+                        onClick = {
+                            // Log in directly as MASTER via the master account
+                            viewModel.signInWithIdPassword("MASTER", masterPassword, "Master Administrator") { success, msg ->
+                                if (success) {
+                                    onLogin()
+                                } else {
+                                    Toast.makeText(context, "Incorrect master password", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C3AED))
+                    ) {
+                        Text("Enter as Master", fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+                }
+            }
+        }
+        // ──────────────────────────────────────────────────────────────────
+
         Spacer(modifier = Modifier.height(40.dp))
     }
 }
@@ -665,6 +739,13 @@ fun MasterControlScreen(viewModel: SurveyViewModel) {
     val context = LocalContext.current
     var passwordInput by remember { mutableStateOf("") }
 
+    // v3.4: Countdown timer state
+    val secondsRemaining by viewModel.masterSecondsRemaining.collectAsState()
+    val minutes = secondsRemaining / 60
+    val seconds = secondsRemaining % 60
+    val timerLabel = "%d:%02d".format(minutes, seconds)
+    val isExpiringSoon = secondsRemaining <= 60
+
     if (!isAuth) {
         Column(
             modifier = Modifier
@@ -691,6 +772,13 @@ fun MasterControlScreen(viewModel: SurveyViewModel) {
                 color = Color.Gray,
                 textAlign = TextAlign.Center
             )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                "⏱ Session lasts 5 minutes after activation.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFF7C3AED),
+                textAlign = TextAlign.Center
+            )
             Spacer(modifier = Modifier.height(28.dp))
 
             OutlinedTextField(
@@ -705,7 +793,7 @@ fun MasterControlScreen(viewModel: SurveyViewModel) {
             Button(
                 onClick = {
                     if (viewModel.switchToMasterRole(passwordInput)) {
-                        Toast.makeText(context, "✓ Master role activated! Fetching all records...", Toast.LENGTH_LONG).show()
+                        Toast.makeText(context, "✓ Master role activated! Session expires in 5 min.", Toast.LENGTH_LONG).show()
                     } else {
                         Toast.makeText(context, "Incorrect password", Toast.LENGTH_SHORT).show()
                     }
@@ -716,8 +804,62 @@ fun MasterControlScreen(viewModel: SurveyViewModel) {
             }
         }
     } else {
-        // Authenticated Master Control Panel
+        // ── Authenticated Master Control Panel ─────────────────────────────
         Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
+
+            // v3.4: Session countdown banner
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isExpiringSoon) Color(0xFFFFEBEE) else Color(0xFFE8F5E9)
+                ),
+                border = androidx.compose.foundation.BorderStroke(
+                    1.dp,
+                    if (isExpiringSoon) Color(0xFFEF5350) else Color(0xFF66BB6A)
+                )
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            if (isExpiringSoon) Icons.Default.Warning else Icons.Default.Timer,
+                            contentDescription = null,
+                            tint = if (isExpiringSoon) Color(0xFFEF5350) else Color(0xFF388E3C),
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                if (isExpiringSoon) "⚠ Session expiring soon!" else "Master Session Active",
+                                fontWeight = FontWeight.Bold,
+                                color = if (isExpiringSoon) Color(0xFFEF5350) else Color(0xFF388E3C),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Text(
+                                "Time remaining: $timerLabel",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (isExpiringSoon) Color(0xFFEF5350) else Color(0xFF388E3C)
+                            )
+                        }
+                    }
+                    // Logout Now / Logout Master button
+                    OutlinedButton(
+                        onClick = {
+                            viewModel.logoutMaster()
+                            Toast.makeText(context, "Master session ended", Toast.LENGTH_SHORT).show()
+                        },
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFEF5350)),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFEF5350))
+                    ) {
+                        Text(if (isExpiringSoon) "Logout Now" else "Logout Master", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
             Text("Master Control Services", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Text("Advanced system controls and Drive sync diagnostics", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
             Spacer(modifier = Modifier.height(16.dp))
@@ -758,7 +900,24 @@ fun MasterControlScreen(viewModel: SurveyViewModel) {
                     }
                 }
             }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // v3.4: Prominent Logout Master button at bottom
+            Button(
+                onClick = {
+                    viewModel.logoutMaster()
+                    Toast.makeText(context, "Master session ended. Re-enter password to switch again.", Toast.LENGTH_LONG).show()
+                },
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF5350))
+            ) {
+                Icon(Icons.Default.Logout, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Logout Master Session", fontWeight = FontWeight.Bold)
+            }
         }
+        // ──────────────────────────────────────────────────────────────────
     }
 }
 

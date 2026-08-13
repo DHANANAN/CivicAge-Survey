@@ -34,8 +34,8 @@ android {
     applicationId = "com.scsc.app"
     minSdk = 24
     targetSdk = 35
-    versionCode = 33
-    versionName = "3.3"
+    versionCode = 34
+    versionName = "3.4"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

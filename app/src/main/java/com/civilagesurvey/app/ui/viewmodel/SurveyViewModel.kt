@@ -20,6 +20,8 @@ import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -28,7 +30,12 @@ import java.net.*
 import java.text.SimpleDateFormat
 import java.util.*
 
+
+/** v3.4: Master session duration in seconds (5 minutes). */
+private const val MASTER_SESSION_SECONDS = 300
+
 class SurveyViewModel(
+
     application: Application,
     private val repository: SurveyRepository,
     private val googleFormsRepository: GoogleFormsRepository
@@ -80,6 +87,10 @@ class SurveyViewModel(
     val isMasterAuthenticated = MutableStateFlow(false)
     val showSwipeHintOverlay = MutableStateFlow(false) // swipe tips permanently disabled v3.2
     val archivedSurveyUids = MutableStateFlow<Set<String>>(emptySet())
+
+    // v3.4: Master session expiry — 5-minute countdown
+    val masterSecondsRemaining = MutableStateFlow(MASTER_SESSION_SECONDS)
+    private var masterExpiryJob: Job? = null
 
     // Participant & Caregiver Profile Flows
     val survivorName = MutableStateFlow("")
@@ -293,8 +304,8 @@ class SurveyViewModel(
     }
 
     /**
-     * v3.2: Simplified ID+Password login for 25 Normal accounts + Master.
-     * No email required.
+     * v3.2+: Simplified ID+Password login for 25 Normal accounts + Master.
+     * v3.4: Resets any active Master session on every login (switching IDs forces master re-entry).
      */
     fun signInWithIdPassword(
         id: String,
@@ -310,6 +321,10 @@ class SurveyViewModel(
             return
         }
 
+        // v3.4: Always reset master session when switching accounts
+        // (master password must be re-entered after login change)
+        logoutMaster()
+
         val finalName = displayName.trim().ifBlank {
             if (role == Config.ROLE_MASTER) "Master Administrator" else "Field Surveyor $cleanId"
         }
@@ -322,6 +337,7 @@ class SurveyViewModel(
 
         if (role == Config.ROLE_MASTER) {
             isMasterAuthenticated.value = true
+            startMasterSessionTimer() // start 5-min expiry for direct master login
         }
 
         prefs.edit()
@@ -336,9 +352,10 @@ class SurveyViewModel(
         onResult(true, "Signed in as $role ($cleanId)")
     }
 
+
     /**
-     * v3.2: Allow any logged-in user to switch to Master role by entering the master password.
-     * No biometrics, no re-auth — just password check.
+     * v3.4: Switch any logged-in session to Master role by entering the master password.
+     * Starts a 5-minute expiry timer.
      */
     fun switchToMasterRole(password: String): Boolean {
         if (password.trim() != Config.MASTER_PASSWORD) return false
@@ -352,7 +369,48 @@ class SurveyViewModel(
         stopRealtimeFirestoreSync()
         startRealtimeFirestoreSync()
 
+        // Start 5-minute session expiry countdown
+        startMasterSessionTimer()
+
         return true
+    }
+
+    /**
+     * v3.4: Start a 5-minute countdown. On expiry, demote Master back to Normal.
+     */
+    private fun startMasterSessionTimer() {
+        masterExpiryJob?.cancel()
+        masterSecondsRemaining.value = MASTER_SESSION_SECONDS
+        masterExpiryJob = viewModelScope.launch {
+            var remaining = MASTER_SESSION_SECONDS
+            while (remaining > 0) {
+                delay(1000L)
+                remaining--
+                masterSecondsRemaining.value = remaining
+            }
+            // Timer expired — demote Master role
+            logoutMaster()
+        }
+    }
+
+    /**
+     * v3.4: Demote Master back to Normal without full logout.
+     * Called on manual "Logout Master" or on session expiry.
+     */
+    fun logoutMaster() {
+        masterExpiryJob?.cancel()
+        masterExpiryJob = null
+        masterSecondsRemaining.value = MASTER_SESSION_SECONDS
+        isMasterAuthenticated.value = false
+
+        // Demote to Normal if currently Master (keep the underlying user logged in)
+        if (userRole.value == Config.ROLE_MASTER) {
+            userRole.value = Config.ROLE_NORMAL
+            prefs.edit().putString("userRole", Config.ROLE_NORMAL).apply()
+            // Re-sync as Normal (device-local only)
+            stopRealtimeFirestoreSync()
+            startRealtimeFirestoreSync()
+        }
     }
 
     fun useLocalTestingMode(email: String, fullName: String, surveyorCode: String, mobileNumber: String) {
@@ -376,6 +434,8 @@ class SurveyViewModel(
     }
 
     fun logout() {
+        // v3.4: also cancel any active Master session
+        logoutMaster()
         stopRealtimeFirestoreSync()
         surveyorEmail.value = ""
         surveyorName.value = ""
