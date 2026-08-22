@@ -269,7 +269,12 @@ fun QuestionView(question: Question, viewModel: SurveyViewModel) {
                 SubjectiveAppReviewView(question, viewModel, savedAnswers)
             }
             InputType.NUMBER -> {
-                var textValue by remember(currentAnswer) { mutableStateOf(currentAnswer ?: "") }
+                var textValue by remember(question.id) { mutableStateOf(currentAnswer ?: "") }
+                LaunchedEffect(question.id) {
+                    if (textValue != (currentAnswer ?: "")) {
+                        textValue = currentAnswer ?: ""
+                    }
+                }
                 OutlinedTextField(
                     value = textValue,
                     onValueChange = {
@@ -281,9 +286,15 @@ fun QuestionView(question: Question, viewModel: SurveyViewModel) {
                 )
             }
             InputType.TEXT, InputType.FREE_TEXT -> {
-                var textValue by remember(currentAnswer) { mutableStateOf(currentAnswer ?: "") }
+                var textValue by remember(question.id) { mutableStateOf(currentAnswer ?: "") }
                 val isRecording by viewModel.isRecording.collectAsState()
                 val recordingDuration by viewModel.recordingDuration.collectAsState()
+
+                LaunchedEffect(question.id) {
+                    if (textValue != (currentAnswer ?: "")) {
+                        textValue = currentAnswer ?: ""
+                    }
+                }
 
                 Column(modifier = Modifier.fillMaxWidth()) {
                     OutlinedTextField(
@@ -477,9 +488,18 @@ fun ThemeView(theme: InterviewTheme, index: Int, viewModel: SurveyViewModel) {
                         }
                         if (isSelected) {
                             Spacer(modifier = Modifier.height(8.dp))
+                            var probeText by remember(probeResponseKey) { mutableStateOf(probeResponse) }
+                            LaunchedEffect(probeResponseKey) {
+                                if (probeText != probeResponse) {
+                                    probeText = probeResponse
+                                }
+                            }
                             OutlinedTextField(
-                                value = probeResponse,
-                                onValueChange = { viewModel.saveAnswer(probeResponseKey, it) },
+                                value = probeText,
+                                onValueChange = {
+                                    probeText = it
+                                    viewModel.saveAnswer(probeResponseKey, it)
+                                },
                                 modifier = Modifier.fillMaxWidth(),
                                 label = { Text("Notes for this probe") },
                                 placeholder = { Text("Type specific response notes for this probe...") },
@@ -495,9 +515,19 @@ fun ThemeView(theme: InterviewTheme, index: Int, viewModel: SurveyViewModel) {
 
     Spacer(modifier = Modifier.height(24.dp))
 
+    var themeResponseText by remember(index) { mutableStateOf(answerText) }
+    LaunchedEffect(index, answerText) {
+        if (themeResponseText != answerText && !isRecording) {
+            themeResponseText = answerText
+        }
+    }
+
     OutlinedTextField(
-        value = answerText,
-        onValueChange = { viewModel.saveInterviewAnswer(index, it) },
+        value = themeResponseText,
+        onValueChange = {
+            themeResponseText = it
+            viewModel.saveInterviewAnswer(index, it)
+        },
         modifier = Modifier.fillMaxWidth().heightIn(min = 150.dp),
         label = { Text("Response Notes") },
         placeholder = { Text("Type interview responses and observation notes here...") }
@@ -646,9 +676,19 @@ fun SubjectiveAppReviewView(
             val appReviewKey = "${question.id}_app_${index}_review"
             val appStatusKey = "${question.id}_app_${index}_status"
 
-            val appName = savedAnswers[appNameKey] ?: ""
-            val appReview = savedAnswers[appReviewKey] ?: ""
+            val appNameState = savedAnswers[appNameKey] ?: ""
+            val appReviewState = savedAnswers[appReviewKey] ?: ""
             val appStatus = savedAnswers[appStatusKey] ?: ""
+
+            var appName by remember(appNameKey) { mutableStateOf(appNameState) }
+            var appReview by remember(appReviewKey) { mutableStateOf(appReviewState) }
+
+            LaunchedEffect(appNameKey, appNameState) {
+                if (appName != appNameState) appName = appNameState
+            }
+            LaunchedEffect(appReviewKey, appReviewState) {
+                if (appReview != appReviewState) appReview = appReviewState
+            }
 
             Card(
                 modifier = Modifier
@@ -668,7 +708,10 @@ fun SubjectiveAppReviewView(
 
                     OutlinedTextField(
                         value = appName,
-                        onValueChange = { viewModel.saveAnswer(appNameKey, it) },
+                        onValueChange = {
+                            appName = it
+                            viewModel.saveAnswer(appNameKey, it)
+                        },
                         label = { Text("App or Digital Service Name") },
                         placeholder = { Text("e.g. Health App, Metro Ticket App, Grievance Portal...") },
                         singleLine = true,
@@ -695,7 +738,10 @@ fun SubjectiveAppReviewView(
                     Spacer(modifier = Modifier.height(12.dp))
                     OutlinedTextField(
                         value = appReview,
-                        onValueChange = { viewModel.saveAnswer(appReviewKey, it) },
+                        onValueChange = {
+                            appReview = it
+                            viewModel.saveAnswer(appReviewKey, it)
+                        },
                         label = { Text("Subjective Review & Experience Notes") },
                         placeholder = { Text("Record detailed feedback, difficulties, or observation notes...") },
                         modifier = Modifier.fillMaxWidth().heightIn(min = 100.dp)

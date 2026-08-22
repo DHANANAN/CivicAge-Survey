@@ -774,7 +774,7 @@ fun MasterControlScreen(viewModel: SurveyViewModel) {
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                "⏱ Session lasts 5 minutes after activation.",
+                "Session lasts 5 minutes after activation.",
                 style = MaterialTheme.typography.bodySmall,
                 color = Color(0xFF7C3AED),
                 textAlign = TextAlign.Center
@@ -793,7 +793,7 @@ fun MasterControlScreen(viewModel: SurveyViewModel) {
             Button(
                 onClick = {
                     if (viewModel.switchToMasterRole(passwordInput)) {
-                        Toast.makeText(context, "✓ Master role activated! Session expires in 5 min.", Toast.LENGTH_LONG).show()
+                        Toast.makeText(context, "Master role activated! Session expires in 5 min.", Toast.LENGTH_LONG).show()
                     } else {
                         Toast.makeText(context, "Incorrect password", Toast.LENGTH_SHORT).show()
                     }
@@ -833,7 +833,7 @@ fun MasterControlScreen(viewModel: SurveyViewModel) {
                         Spacer(modifier = Modifier.width(8.dp))
                         Column {
                             Text(
-                                if (isExpiringSoon) "⚠ Session expiring soon!" else "Master Session Active",
+                                if (isExpiringSoon) "Session expiring soon!" else "Master Session Active",
                                 fontWeight = FontWeight.Bold,
                                 color = if (isExpiringSoon) Color(0xFFEF5350) else Color(0xFF388E3C),
                                 style = MaterialTheme.typography.bodyMedium
@@ -960,7 +960,7 @@ fun RecordsScreen(viewModel: SurveyViewModel) {
                             // Master only: POST to Apps Script → appends to Google Doc → open Doc
                             viewModel.approveInstrument(s.surveyUid, "Approved by Master") { success, docUrl ->
                                 if (success) {
-                                    Toast.makeText(context, "✓ Approved! Opening Google Doc...", Toast.LENGTH_LONG).show()
+                                    Toast.makeText(context, "Approved! Opening Google Doc...", Toast.LENGTH_LONG).show()
                                     if (docUrl != null) {
                                         val intent = android.content.Intent(
                                             android.content.Intent.ACTION_VIEW,
@@ -1268,7 +1268,7 @@ fun SettingsScreen(viewModel: SurveyViewModel, onNavigateMasterControl: () -> Un
     val appearanceMode by viewModel.appearanceMode.collectAsState()
     val fontSizeMode by viewModel.fontSizeMode.collectAsState()
 
-    val appearanceOptions = listOf("Professional Light", "Dark Mode", "Black & White")
+    val appearanceOptions = listOf("Professional Light", "Dark Mode", "Warm Sepia", "Modern Indigo", "High Contrast")
     val fontSizeOptions = listOf("Standard", "Large", "Extra Large")
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
@@ -1285,7 +1285,10 @@ fun SettingsScreen(viewModel: SurveyViewModel, onNavigateMasterControl: () -> Un
             Column(modifier = Modifier.padding(16.dp)) {
                 Text("Theme Mode", fontWeight = FontWeight.SemiBold)
                 Spacer(modifier = Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     appearanceOptions.forEach { option ->
                         val isSelected = appearanceMode == option
                         FilterChip(
@@ -1294,11 +1297,14 @@ fun SettingsScreen(viewModel: SurveyViewModel, onNavigateMasterControl: () -> Un
                             label = {
                                 Text(
                                     when (option) {
-                                        "Professional Light" -> "☀️ Light"
-                                        "Dark Mode" -> "🌙 Dark"
-                                        else -> "⬛ B&W"
+                                        "Professional Light" -> "Light"
+                                        "Dark Mode" -> "Dark"
+                                        "Warm Sepia" -> "Warm Sepia"
+                                        "Modern Indigo" -> "Modern Indigo"
+                                        else -> "High Contrast"
                                     },
-                                    fontSize = 12.sp
+                                    fontSize = 12.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                                 )
                             }
                         )

@@ -20,6 +20,30 @@ private val LightColorScheme = lightColorScheme(
     outline = BorderGrey
 )
 
+private val WarmSepiaColorScheme = lightColorScheme(
+    primary = Color(0xFF9A3412),
+    secondary = Color(0xFFC2410C),
+    background = Color(0xFFFDFBF7),
+    surface = Color(0xFFF5EFE6),
+    onPrimary = Color.White,
+    onSecondary = Color.White,
+    onBackground = Color(0xFF27272A),
+    onSurface = Color(0xFF27272A),
+    outline = Color(0xFFD6CEC2)
+)
+
+private val ModernIndigoColorScheme = lightColorScheme(
+    primary = Color(0xFF4F46E5),
+    secondary = Color(0xFF0D9488),
+    background = Color(0xFFF8FAFC),
+    surface = Color(0xFFEEF2FF),
+    onPrimary = Color.White,
+    onSecondary = Color.White,
+    onBackground = Color(0xFF0F172A),
+    onSurface = Color(0xFF0F172A),
+    outline = Color(0xFFC7D2FE)
+)
+
 private val BlackWhiteColorScheme = lightColorScheme(
     primary = Color.Black,
     secondary = Color.Black,
@@ -51,9 +75,11 @@ fun DCATheme(
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
-        appearanceMode.contains("Black & White", ignoreCase = true) ||
+        appearanceMode.contains("Sepia", ignoreCase = true) -> WarmSepiaColorScheme
+        appearanceMode.contains("Indigo", ignoreCase = true) -> ModernIndigoColorScheme
+        appearanceMode.contains("Black", ignoreCase = true) ||
         appearanceMode.contains("B&W", ignoreCase = true) ||
-        appearanceMode.contains("Black", ignoreCase = true) -> BlackWhiteColorScheme
+        appearanceMode.contains("Contrast", ignoreCase = true) -> BlackWhiteColorScheme
         appearanceMode.contains("Dark", ignoreCase = true) -> DarkColorScheme
         else -> LightColorScheme
     }
