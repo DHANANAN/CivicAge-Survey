@@ -27,34 +27,34 @@ object Config {
 
     /**
      * 25 Normal user accounts: ID → password
-     * IDs: SC0101–SC0125  |  Passwords: pass01–pass25
+     * IDs: SC0101–SC0125  |  Passwords: scsc01–scsc25
      */
     val NORMAL_USER_CREDENTIALS: Map<String, String> = mapOf(
-        "SC0101" to "pass01",
-        "SC0102" to "pass02",
-        "SC0103" to "pass03",
-        "SC0104" to "pass04",
-        "SC0105" to "pass05",
-        "SC0106" to "pass06",
-        "SC0107" to "pass07",
-        "SC0108" to "pass08",
-        "SC0109" to "pass09",
-        "SC0110" to "pass10",
-        "SC0111" to "pass11",
-        "SC0112" to "pass12",
-        "SC0113" to "pass13",
-        "SC0114" to "pass14",
-        "SC0115" to "pass15",
-        "SC0116" to "pass16",
-        "SC0117" to "pass17",
-        "SC0118" to "pass18",
-        "SC0119" to "pass19",
-        "SC0120" to "pass20",
-        "SC0121" to "pass21",
-        "SC0122" to "pass22",
-        "SC0123" to "pass23",
-        "SC0124" to "pass24",
-        "SC0125" to "pass25"
+        "SC0101" to "scsc01",
+        "SC0102" to "scsc02",
+        "SC0103" to "scsc03",
+        "SC0104" to "scsc04",
+        "SC0105" to "scsc05",
+        "SC0106" to "scsc06",
+        "SC0107" to "scsc07",
+        "SC0108" to "scsc08",
+        "SC0109" to "scsc09",
+        "SC0110" to "scsc10",
+        "SC0111" to "scsc11",
+        "SC0112" to "scsc12",
+        "SC0113" to "scsc13",
+        "SC0114" to "scsc14",
+        "SC0115" to "scsc15",
+        "SC0116" to "scsc16",
+        "SC0117" to "scsc17",
+        "SC0118" to "scsc18",
+        "SC0119" to "scsc19",
+        "SC0120" to "scsc20",
+        "SC0121" to "scsc21",
+        "SC0122" to "scsc22",
+        "SC0123" to "scsc23",
+        "SC0124" to "scsc24",
+        "SC0125" to "scsc25"
     )
 
     /** Validate ID+password and return the role, or null if invalid credentials */

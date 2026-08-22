@@ -53,18 +53,22 @@ class TextToSpeechHelper(context: Context) : TextToSpeech.OnInitListener {
         if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
             tts.language = Locale.ENGLISH
         }
-        tts.setSpeechRate(0.8f) // Clearer, slower pace
+        tts.setSpeechRate(0.92f) // Warm, natural conversational pace
+        tts.setPitch(1.02f)      // Warmer, friendly human tone
         
         try {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
                 val voices = tts.voices
                 if (voices != null) {
-                    for (voice in voices) {
-                        if (voice.locale.country.equals("IN", ignoreCase = true) && 
-                            voice.locale.language.equals("en", ignoreCase = true)) {
-                            tts.voice = voice
-                            break
-                        }
+                    val matchingVoice = voices.firstOrNull { voice ->
+                        voice.locale.country.equals("IN", ignoreCase = true) && 
+                        voice.locale.language.equals("en", ignoreCase = true) &&
+                        !voice.isNetworkConnectionRequired
+                    } ?: voices.firstOrNull { voice ->
+                        voice.locale.language.equals("en", ignoreCase = true)
+                    }
+                    if (matchingVoice != null) {
+                        tts.voice = matchingVoice
                     }
                 }
             }

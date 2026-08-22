@@ -1092,14 +1092,14 @@ fun InstrumentSelectorScreen(viewModel: SurveyViewModel, onNavigate: () -> Unit)
                         OutlinedTextField(
                             value = respondentName,
                             onValueChange = { respondentName = it },
-                            label = { Text("Respondent Name *") },
+                            label = { Text("Respondent Name (Optional)") },
                             modifier = Modifier.fillMaxWidth()
                         )
                         if (targetIndex <= 1) {
                             OutlinedTextField(
                                 value = respondentAge,
                                 onValueChange = { respondentAge = it },
-                                label = { Text("Respondent Age *") },
+                                label = { Text("Respondent Age (Optional)") },
                                 modifier = Modifier.fillMaxWidth()
                             )
                         }
@@ -1155,16 +1155,12 @@ fun InstrumentSelectorScreen(viewModel: SurveyViewModel, onNavigate: () -> Unit)
                             Toast.makeText(context, "Consent check is required.", Toast.LENGTH_SHORT).show()
                             return@Button
                         }
-                        if (!isSpecialInstrument && respondentName.isBlank()) {
-                            Toast.makeText(context, "Please enter respondent name.", Toast.LENGTH_SHORT).show()
-                            return@Button
-                        }
 
                         viewModel.selectedCity.value = selectedCity
                         viewModel.startDcaSession(
                             instrument = targetInstrument!!,
-                            rName = if (isSpecialInstrument) "Anonymous Respondent" else respondentName,
-                            rAge = if (isSpecialInstrument) "0" else respondentAge,
+                            rName = if (isSpecialInstrument || respondentName.isBlank()) "Anonymous Respondent" else respondentName,
+                            rAge = if (isSpecialInstrument || respondentAge.isBlank()) "0" else respondentAge,
                             rMobile = respondentMobile,
                             rCity = selectedCity
                         )

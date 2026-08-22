@@ -266,34 +266,7 @@ fun QuestionView(question: Question, viewModel: SurveyViewModel) {
                 }
             }
             InputType.TABLE -> {
-                if (question.citySpecific) {
-                    val services = viewModel.getCitySpecificServices()
-                    services.forEach { service ->
-                        Text(service, fontWeight = FontWeight.Bold, fontSize = 18.sp, modifier = Modifier.padding(top = 16.dp))
-                        Spacer(modifier = Modifier.height(8.dp))
-                        val columns = listOf(
-                            "heard" to "Heard",
-                            "tried" to "Tried",
-                            "alone" to "Used Alone",
-                            "help" to "Used with Help",
-                            "never" to "Never Used"
-                        )
-                        Row(modifier = Modifier.horizontalScroll(rememberScrollState()).padding(vertical = 4.dp)) {
-                            columns.forEach { (key, label) ->
-                                val cellId = "C_GRID_${service}_$key"
-                                val isSelected = savedAnswers[cellId] == "Yes"
-                                FilterChip(
-                                    selected = isSelected,
-                                    onClick = {
-                                        viewModel.saveAnswer(cellId, if (isSelected) "No" else "Yes")
-                                    },
-                                    label = { Text(label, fontSize = 14.sp) },
-                                    modifier = Modifier.padding(end = 8.dp)
-                                )
-                            }
-                        }
-                    }
-                }
+                SubjectiveAppReviewView(question, viewModel, savedAnswers)
             }
             InputType.NUMBER -> {
                 var textValue by remember(currentAnswer) { mutableStateOf(currentAnswer ?: "") }
@@ -309,15 +282,73 @@ fun QuestionView(question: Question, viewModel: SurveyViewModel) {
             }
             InputType.TEXT, InputType.FREE_TEXT -> {
                 var textValue by remember(currentAnswer) { mutableStateOf(currentAnswer ?: "") }
-                OutlinedTextField(
-                    value = textValue,
-                    onValueChange = {
-                        textValue = it
-                        viewModel.saveAnswer(question.id, it)
-                    },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 150.dp),
-                    placeholder = { Text("Enter response here...") }
-                )
+                val isRecording by viewModel.isRecording.collectAsState()
+                val recordingDuration by viewModel.recordingDuration.collectAsState()
+
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    OutlinedTextField(
+                        value = textValue,
+                        onValueChange = {
+                            textValue = it
+                            viewModel.saveAnswer(question.id, it)
+                        },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 150.dp),
+                        placeholder = { Text("Enter response or tap voice assistant below to transcribe...") }
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    
+                    // Voice transcription assistant for text questions
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    if (isRecording) Icons.Default.Mic else Icons.Default.MicOff,
+                                    contentDescription = null,
+                                    tint = if (isRecording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = if (isRecording) "Listening... (${recordingDuration}s)" else "Voice Transcription",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                            if (!isRecording) {
+                                OutlinedButton(
+                                    onClick = { viewModel.startVoiceAnswer() },
+                                    modifier = Modifier.height(36.dp)
+                                ) {
+                                    Text("Speak", fontSize = 13.sp)
+                                }
+                            } else {
+                                Button(
+                                    onClick = {
+                                        viewModel.stopVoiceAnswer { transcribed ->
+                                            if (transcribed.isNotBlank()) {
+                                                val newText = if (textValue.isBlank()) transcribed else "$textValue\n$transcribed"
+                                                textValue = newText
+                                                viewModel.saveAnswer(question.id, newText)
+                                            }
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                                    modifier = Modifier.height(36.dp)
+                                ) {
+                                    Text("Done & Insert", fontSize = 13.sp)
+                                }
+                            }
+                        }
+                    }
+                }
             }
             else -> {
                 Text("Input type ${question.inputType} not implemented yet", style = MaterialTheme.typography.bodyLarge)
@@ -585,3 +616,113 @@ fun BreakAlertDialog(onDismiss: () -> Unit) {
         }
     )
 }
+
+@Composable
+fun SubjectiveAppReviewView(
+    question: Question,
+    viewModel: SurveyViewModel,
+    savedAnswers: Map<String, String>
+) {
+    val countKey = "${question.id}_app_count"
+    val appCount = (savedAnswers[countKey]?.toIntOrNull() ?: 1).coerceAtLeast(1)
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = "Digital App / Service Review (Subjective)",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = "Enter the name of each civic app/service tried or used, and record subjective experience notes.",
+            style = MaterialTheme.typography.bodySmall,
+            color = Color.Gray
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+
+        for (index in 0 until appCount) {
+            val appNameKey = "${question.id}_app_${index}_name"
+            val appReviewKey = "${question.id}_app_${index}_review"
+            val appStatusKey = "${question.id}_app_${index}_status"
+
+            val appName = savedAnswers[appNameKey] ?: ""
+            val appReview = savedAnswers[appReviewKey] ?: ""
+            val appStatus = savedAnswers[appStatusKey] ?: ""
+
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        "App / Service #${index + 1}",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedTextField(
+                        value = appName,
+                        onValueChange = { viewModel.saveAnswer(appNameKey, it) },
+                        label = { Text("App or Digital Service Name") },
+                        placeholder = { Text("e.g. Health App, Metro Ticket App, Grievance Portal...") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text("Usage Experience:", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    val statuses = listOf("Heard Only", "Tried", "Used Alone", "Used with Help", "Could Not Use")
+                    Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                        statuses.forEach { status ->
+                            val isSelected = appStatus == status
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = { viewModel.saveAnswer(appStatusKey, if (isSelected) "" else status) },
+                                label = { Text(status, fontSize = 13.sp) },
+                                modifier = Modifier.padding(end = 6.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = appReview,
+                        onValueChange = { viewModel.saveAnswer(appReviewKey, it) },
+                        label = { Text("Subjective Review & Experience Notes") },
+                        placeholder = { Text("Record detailed feedback, difficulties, or observation notes...") },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 100.dp)
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            OutlinedButton(
+                onClick = { viewModel.saveAnswer(countKey, (appCount + 1).toString()) }
+            ) {
+                Text("+ Add Another App Review")
+            }
+
+            if (appCount > 1) {
+                TextButton(
+                    onClick = { viewModel.saveAnswer(countKey, (appCount - 1).toString()) }
+                ) {
+                    Text("Remove Last", color = MaterialTheme.colorScheme.error)
+                }
+            }
+        }
+    }
+}
+
