@@ -65,11 +65,6 @@ object Config {
         // Master login via any ID if password matches master password
         if (cleanPass == MASTER_PASSWORD) return ROLE_MASTER
 
-        // Guest Mode support for fast field access
-        if (cleanId == "GUEST" || cleanId.startsWith("GUEST") || cleanPass.equals("guest", ignoreCase = true) || cleanPass.isBlank()) {
-            return ROLE_NORMAL
-        }
-
         // Normal user: check the 25 accounts
         val expectedPass = NORMAL_USER_CREDENTIALS[cleanId]
         if (expectedPass != null && expectedPass == cleanPass) return ROLE_NORMAL
