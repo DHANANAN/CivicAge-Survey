@@ -866,6 +866,30 @@ fun MasterControlScreen(viewModel: SurveyViewModel) {
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Real-Time Master Cloud Data Tunnel", fontWeight = FontWeight.Bold)
+                    Text("Automatically syncs & pulls all survey records submitted from any device (SC0101-SC0125 & Guest mode).", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = {
+                            viewModel.syncCloudRecordsToMaster { count ->
+                                Toast.makeText(context, "Cloud sync complete: $count records updated on Master Board.", Toast.LENGTH_LONG).show()
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.CloudSync, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Sync All Cloud Records Now", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            Card(
+                modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f))
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
@@ -936,6 +960,35 @@ fun RecordsScreen(viewModel: SurveyViewModel) {
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
 
+        if (isMaster) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f))
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Master Board Live Auto-Sync", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                        Text("Live cloud tunnel streaming surveys from all devices & Guest mode", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            viewModel.syncCloudRecordsToMaster { count ->
+                                Toast.makeText(context, "Synced $count records from cloud to Master Board!", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    ) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Sync Cloud Records")
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Sync Cloud", fontSize = 12.sp)
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+        }
 
         OutlinedTextField(
             value = searchQuery,

@@ -3,8 +3,10 @@ package com.civilagesurvey.app.data.repository
 import com.civilagesurvey.app.data.database.*
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -256,5 +258,106 @@ class SurveyRepository(private val surveyDao: SurveyDao) {
         } catch (e: Exception) {
             false
         }
+    }
+
+    private var realTimeListenerRegistration: com.google.firebase.firestore.ListenerRegistration? = null
+
+    /** Starts real-time cloud data tunnel listener for survey responses. Automatically upserts received surveys into Room. */
+    fun startRealtimeFirestoreSync(onRecordReceived: (SurveyEntity) -> Unit = {}) {
+        stopRealtimeFirestoreSync()
+        try {
+            realTimeListenerRegistration = firestore.collection("surveyResponses")
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null || snapshot == null) return@addSnapshotListener
+                    for (doc in snapshot.documents) {
+                        val data = doc.data ?: continue
+                        val entity = parseSurveyFromMap(data)
+                        if (entity != null) {
+                            kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+                                surveyDao.insertSurvey(entity)
+                                onRecordReceived(entity)
+                            }
+                        }
+                    }
+                }
+        } catch (ex: Exception) {
+            android.util.Log.e("DCA_SYNC", "Failed to initialize Firestore listener: ${ex.message}")
+        }
+    }
+
+    /** Stops active real-time Firestore listener. */
+    fun stopRealtimeFirestoreSync() {
+        try {
+            realTimeListenerRegistration?.remove()
+        } catch (e: Exception) {}
+        realTimeListenerRegistration = null
+    }
+
+    /** Fetches all cloud records from Firestore to update Master Board on demand or startup. */
+    suspend fun fetchRemoteSurveysFromFirestore(): Int = withContext(Dispatchers.IO) {
+        try {
+            var count = 0
+            val snapshot = firestore.collection("surveyResponses").get().await()
+            for (doc in snapshot.documents) {
+                val data = doc.data ?: continue
+                val entity = parseSurveyFromMap(data)
+                if (entity != null) {
+                    surveyDao.insertSurvey(entity)
+                    count++
+                }
+            }
+            // Also fetch from records collection
+            val recordsSnapshot = firestore.collection("records").get().await()
+            for (doc in recordsSnapshot.documents) {
+                val data = doc.data ?: continue
+                val entity = parseSurveyFromMap(data)
+                if (entity != null) {
+                    surveyDao.insertSurvey(entity)
+                    count++
+                }
+            }
+            count
+        } catch (e: Exception) {
+            android.util.Log.e("DCA_SYNC", "fetchRemoteSurveysFromFirestore error: ${e.message}")
+            0
+        }
+    }
+
+    /** Converts Firestore document data map to SurveyEntity object. */
+    fun parseSurveyFromMap(data: Map<String, Any>): SurveyEntity? {
+        val surveyUid = (data["surveyUid"] ?: data["recordId"]) as? String ?: return null
+        if (surveyUid.isBlank()) return null
+
+        return SurveyEntity(
+            surveyUid = surveyUid,
+            createdAt = (data["createdAt"] as? Number)?.toLong() ?: (data["geoTimestamp"] as? Number)?.toLong() ?: System.currentTimeMillis(),
+            updatedAt = (data["updatedAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
+            createdBy = (data["createdBy"] as? String) ?: (data["surveyorId"] as? String) ?: "",
+            status = (data["status"] as? String) ?: "COMPLETED",
+            consentGiven = (data["consentGiven"] as? Boolean) ?: true,
+            participantName = (data["participantName"] as? String) ?: "",
+            participantAge = (data["participantAge"] as? Number)?.toInt() ?: 0,
+            participantAgeGroup = (data["participantAgeGroup"] as? String) ?: "",
+            participantGender = (data["participantGender"] as? String) ?: "",
+            participantPhone = (data["participantPhone"] as? String) ?: "",
+            respondentName = (data["respondentName"] as? String) ?: (data["displayName"] as? String) ?: "",
+            respondentAge = (data["respondentAge"] as? Number)?.toInt() ?: 0,
+            latitude = (data["latitude"] as? Number)?.toDouble() ?: (data["geoLat"] as? Number)?.toDouble() ?: 0.0,
+            longitude = (data["longitude"] as? Number)?.toDouble() ?: (data["geoLng"] as? Number)?.toDouble() ?: 0.0,
+            gpsAccuracy = (data["gpsAccuracy"] as? Number)?.toFloat() ?: (data["geoAccuracy"] as? Number)?.toFloat() ?: 0f,
+            geoTimestamp = (data["geoTimestamp"] as? Number)?.toLong() ?: System.currentTimeMillis(),
+            manualLocality = (data["manualLocality"] as? String) ?: "",
+            city = (data["city"] as? String) ?: "ND",
+            instrumentType = (data["instrumentType"] as? String) ?: "General_Survey",
+            answersJson = (data["answersJson"] as? String) ?: (data["answers"] as? String) ?: "{}",
+            transcriptText = (data["transcriptText"] as? String) ?: "",
+            manualSummary = (data["manualSummary"] as? String) ?: "",
+            issueCategory = (data["issueCategory"] as? String) ?: "Other",
+            manualUrgency = (data["manualUrgency"] as? String) ?: "Low",
+            isSynced = true,
+            lastSyncedAt = System.currentTimeMillis(),
+            surveyorId = (data["surveyorId"] as? String) ?: (data["userId"] as? String) ?: "",
+            surveyorName = (data["surveyorName"] as? String) ?: (data["displayName"] as? String) ?: ""
+        )
     }
 }

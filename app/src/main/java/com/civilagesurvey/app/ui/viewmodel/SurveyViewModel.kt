@@ -49,32 +49,14 @@ class SurveyViewModel(
     private var firestoreSyncListener: com.google.firebase.firestore.ListenerRegistration? = null
 
     fun startRealtimeFirestoreSync() {
-        if (firestoreSyncListener != null) return
-        val role = userRole.value
-        if (role == Config.ROLE_MASTER || role == Config.ADMIN_ROLE) {
-            val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-            firestoreSyncListener = firestore.collection("surveyResponses")
-                .addSnapshotListener { snapshots, e ->
-                    if (e != null) return@addSnapshotListener
-                    if (snapshots != null) {
-                        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                            for (doc in snapshots.documentChanges) {
-                                try {
-                                    val survey = doc.document.toObject(SurveyEntity::class.java)
-                                    repository.insertSurvey(survey)
-                                } catch (ex: Exception) {
-                                    ex.printStackTrace()
-                                }
-                            }
-                        }
-                    }
-                }
+        repository.startRealtimeFirestoreSync()
+        viewModelScope.launch {
+            repository.fetchRemoteSurveysFromFirestore()
         }
     }
 
     fun stopRealtimeFirestoreSync() {
-        firestoreSyncListener?.remove()
-        firestoreSyncListener = null
+        repository.stopRealtimeFirestoreSync()
     }
 
     // User Session
@@ -352,6 +334,15 @@ class SurveyViewModel(
         onResult(true, "Signed in as $role ($cleanId)")
     }
 
+
+    fun syncCloudRecordsToMaster(onResult: (Int) -> Unit = {}) {
+        clientSyncStatus.value = "Fetching cloud records..."
+        viewModelScope.launch {
+            val count = repository.fetchRemoteSurveysFromFirestore()
+            clientSyncStatus.value = "Synced $count records from cloud."
+            onResult(count)
+        }
+    }
 
     /**
      * v3.4: Switch any logged-in session to Master role by entering the master password.
@@ -910,7 +901,12 @@ class SurveyViewModel(
             // Persist locally to Room (auto-save)
             repository.insertSurvey(finalSurvey)
 
-            // Auto-post completed record to Apps Script → Google Drive + Sheets
+            // 1. Immediately publish to Firestore cloud so Master Board receives it in real-time
+            kotlin.runCatching {
+                repository.syncRecordToFirestore(finalSurvey)
+            }
+
+            // 2. Auto-post completed record to Apps Script → per-user Google Doc + Drive
             val posted = kotlin.runCatching {
                 repository.postRecordToAppsScript(finalSurvey)
             }.getOrDefault(false)
