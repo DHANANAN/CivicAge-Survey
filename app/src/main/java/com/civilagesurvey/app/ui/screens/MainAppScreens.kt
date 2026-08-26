@@ -1010,19 +1010,30 @@ fun RecordsScreen(viewModel: SurveyViewModel) {
                         onDelete = { viewModel.deleteSurvey(s) },
                         onArchive = { viewModel.archiveSurvey(s.surveyUid) },
                         onApprove = {
-                            // Master only: POST to Apps Script → appends to Google Doc → open Doc
-                            viewModel.approveInstrument(s.surveyUid, "Approved by Master") { success, docUrl ->
-                                if (success) {
-                                    Toast.makeText(context, "Approved! Opening Google Doc...", Toast.LENGTH_LONG).show()
-                                    if (docUrl != null) {
-                                        val intent = android.content.Intent(
-                                            android.content.Intent.ACTION_VIEW,
-                                            android.net.Uri.parse(docUrl)
-                                        )
-                                        context.startActivity(intent)
+                            if (isMaster) {
+                                // Master only: POST to Apps Script → appends to Google Doc → open Doc
+                                viewModel.approveInstrument(s.surveyUid, "Approved by Master") { success, docUrl ->
+                                    if (success) {
+                                        Toast.makeText(context, "Approved! Opening Google Doc...", Toast.LENGTH_LONG).show()
+                                        if (docUrl != null) {
+                                            val intent = android.content.Intent(
+                                                android.content.Intent.ACTION_VIEW,
+                                                android.net.Uri.parse(docUrl)
+                                            )
+                                            context.startActivity(intent)
+                                        }
+                                    } else {
+                                        Toast.makeText(context, "Sync failed. Check network.", Toast.LENGTH_SHORT).show()
                                     }
-                                } else {
-                                    Toast.makeText(context, "Sync failed. Check network.", Toast.LENGTH_SHORT).show()
+                                }
+                            } else {
+                                // Student / Surveyor: Submit & Sync to Cloud & Doc
+                                viewModel.approveInstrument(s.surveyUid, "Submitted by Surveyor") { success, _ ->
+                                    if (success) {
+                                        Toast.makeText(context, "Record submitted & synced successfully!", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        Toast.makeText(context, "Submission failed. Check network.", Toast.LENGTH_SHORT).show()
+                                    }
                                 }
                             }
                         },
@@ -1074,7 +1085,21 @@ fun SwipeableSurveyRecordCard(
                 ) {
                     Text("View", fontSize = 12.sp)
                 }
-                // Approve button — Master only
+
+                // Submit / Sync to Doc button — available to students/surveyors to push/re-push to cloud & doc
+                if (!isMaster) {
+                    Button(
+                        onClick = onApprove,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E3A8A)),
+                        modifier = Modifier.padding(end = 8.dp)
+                    ) {
+                        Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(if (survey.isSynced) "Submitted" else "Submit", fontSize = 12.sp)
+                    }
+                }
+
+                // Approve & Doc button — Master only
                 if (isMaster) {
                     Button(
                         onClick = onApprove,
