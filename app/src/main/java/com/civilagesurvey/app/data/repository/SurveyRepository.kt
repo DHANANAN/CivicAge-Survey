@@ -317,10 +317,11 @@ class SurveyRepository(private val surveyDao: SurveyDao) {
         realTimeListenerRegistration = null
     }
 
-    /** Fetches all cloud records from Firestore to update Master Board on demand or startup. */
+    /** Fetches all cloud records from both Firestore and Google Apps Script memory to update Master Board. */
     suspend fun fetchRemoteSurveysFromFirestore(): Int = withContext(Dispatchers.IO) {
+        var count = 0
         try {
-            var count = 0
+            ensureFirebaseAuth()
             val snapshot = firestore.collection("surveyResponses").get().await()
             for (doc in snapshot.documents) {
                 val data = doc.data ?: continue
@@ -330,7 +331,6 @@ class SurveyRepository(private val surveyDao: SurveyDao) {
                     count++
                 }
             }
-            // Also fetch from records collection
             val recordsSnapshot = firestore.collection("records").get().await()
             for (doc in recordsSnapshot.documents) {
                 val data = doc.data ?: continue
@@ -340,9 +340,56 @@ class SurveyRepository(private val surveyDao: SurveyDao) {
                     count++
                 }
             }
-            count
         } catch (e: Exception) {
             android.util.Log.e("DCA_SYNC", "fetchRemoteSurveysFromFirestore error: ${e.message}")
+        }
+        val appsScriptCount = fetchRemoteSurveysFromAppsScript()
+        return@withContext (count + appsScriptCount)
+    }
+
+    /** Dual-Tunnel Backup: Fetches all survey records directly from Google Apps Script Web App memory. */
+    suspend fun fetchRemoteSurveysFromAppsScript(): Int = withContext(Dispatchers.IO) {
+        try {
+            var count = 0
+            val syncUrl = "$APPS_SCRIPT_WEB_APP_URL?action=getRecords&token=$DCA_SECRET_TOKEN"
+            val conn = (URL(syncUrl).openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                instanceFollowRedirects = true
+                connectTimeout = 15000
+                readTimeout = 15000
+            }
+            val code = conn.responseCode
+            if (code in 200..299) {
+                val jsonText = conn.inputStream.bufferedReader().readText()
+                val jsonObj = JSONObject(jsonText)
+                if (jsonObj.optBoolean("success")) {
+                    val arr = jsonObj.optJSONArray("records")
+                    if (arr != null) {
+                        for (i in 0 until arr.length()) {
+                            val rec = arr.getJSONObject(i)
+                            val map = mutableMapOf<String, Any>()
+                            val keys = rec.keys()
+                            while (keys.hasNext()) {
+                                val k = keys.next()
+                                val valObj = rec.get(k)
+                                if (valObj != JSONObject.NULL) {
+                                    map[k] = valObj
+                                }
+                            }
+                            val entity = parseSurveyFromMap(map)
+                            if (entity != null) {
+                                surveyDao.insertSurvey(entity)
+                                count++
+                            }
+                        }
+                    }
+                }
+            }
+            conn.disconnect()
+            android.util.Log.d("DCA_SYNC", "fetchRemoteSurveysFromAppsScript fetched $count records")
+            count
+        } catch (e: Exception) {
+            android.util.Log.e("DCA_SYNC", "fetchRemoteSurveysFromAppsScript failed: ${e.message}")
             0
         }
     }

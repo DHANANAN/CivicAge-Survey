@@ -109,11 +109,12 @@ class SurveyViewModel(
     val allPushRequests: StateFlow<List<PushRequestEntity>> = repository.allPushRequests
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val filteredSurveys: StateFlow<List<SurveyEntity>> = combine(allSurveys, userRole, surveyorId) { surveys, role, currentId ->
-        if (role == Config.ROLE_MASTER || role == Config.ADMIN_ROLE || role == Config.ROLE_QA) {
+    val filteredSurveys: StateFlow<List<SurveyEntity>> = combine(allSurveys, userRole, surveyorId, isMasterAuthenticated) { surveys, role, currentId, masterAuth ->
+        val cleanRole = role.lowercase().trim()
+        if (masterAuth || cleanRole == "master" || cleanRole == Config.ADMIN_ROLE || cleanRole == Config.ROLE_QA || currentId.uppercase() == "MASTER") {
             surveys
         } else {
-            surveys.filter { it.createdBy == currentId || it.surveyorId == currentId }
+            surveys.filter { it.createdBy == currentId || it.surveyorId == currentId || currentId.isBlank() }
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 

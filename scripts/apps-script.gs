@@ -1,6 +1,6 @@
 /**
- * DCA Cloud Sync - Google Doc Appender v3.4 (Fixed)
- * URL: https://script.google.com/macros/s/AKfycbwQ0C5ZiRV8FEJjnNlYMYvhqA91YLu35U8uzYI2zISm7PL8hQFX7D48BT2zboJmjQfLLg/exec
+ * DCA Cloud Sync - Google Doc Appender v3.5 (Dual-Tunnel Memory Enabled)
+ * URL: https://script.google.com/macros/s/AKfycbziNNzXw3FPAdLiWEF_dbeqo2ThLuGWb-jUQpaHg2cLSt6G1GiCDckLQSXaGYMQa_YxFw/exec
  * Token: DCA_SECRET_TOKEN_2026
  * REDEPLOY: Deploy > Manage > pencil > New Version > Deploy
  * TEST: select testWrite() then Run
@@ -25,7 +25,15 @@ const USER_DOC_MAP = {
 
 function doOptions(e){return ContentService.createTextOutput('').setMimeType(ContentService.MimeType.TEXT);}
 
-function doGet(e){return json({status:'DCA v3.4 OK',docs:Object.keys(USER_DOC_MAP).length+' dedicated + 1 common'});}
+function doGet(e){
+  if (e && e.parameter && e.parameter.action === 'getRecords') {
+    var token = e.parameter.token;
+    if (token !== SECRET_TOKEN) return json({ success: false, error: 'Unauthorized' });
+    var records = getMemoryRecords();
+    return json({ success: true, count: records.length, records: records });
+  }
+  return json({ status: 'DCA v3.5 OK', docs: Object.keys(USER_DOC_MAP).length + ' dedicated + 1 common' });
+}
 
 function doPost(e){
   try{
@@ -35,8 +43,41 @@ function doPost(e){
     var uid=(p.userId||'').toUpperCase().trim();
     var docId=USER_DOC_MAP[uid]||COMMON_DOC_ID;
     writeToDoc(docId,p);
+    saveMemoryRecord(p);
     return json({success:true,docId:docId,recordId:p.recordId||'',routed:uid});
   }catch(ex){return json({success:false,error:ex.toString()});}
+}
+
+function saveMemoryRecord(p) {
+  try {
+    var props = PropertiesService.getScriptProperties();
+    var existingJson = props.getProperty('DCA_RECORDS') || '[]';
+    var list = JSON.parse(existingJson);
+    var recId = p.recordId || ('REC-' + Date.now());
+    var found = false;
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].recordId === recId) {
+        list[i] = p;
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      list.unshift(p);
+    }
+    if (list.length > 200) list = list.slice(0, 200);
+    props.setProperty('DCA_RECORDS', JSON.stringify(list));
+  } catch(e) {}
+}
+
+function getMemoryRecords() {
+  try {
+    var props = PropertiesService.getScriptProperties();
+    var existingJson = props.getProperty('DCA_RECORDS') || '[]';
+    return JSON.parse(existingJson);
+  } catch(e) {
+    return [];
+  }
 }
 
 function writeToDoc(docId,p){
@@ -55,12 +96,12 @@ function writeToDoc(docId,p){
     }else if(typeof ans==='string'&&ans.trim().length>0){body.appendParagraph(ans);}
   }
   body.appendParagraph(' ');
-  // NO saveAndClose()
 }
 
 function testWrite(){
   var p={token:'DCA_SECRET_TOKEN_2026',recordId:'TEST-'+Date.now(),userId:'SC0101',displayName:'Test User',city:'Nagpur',instrumentType:'Test Survey',geoLat:'21.14',geoLng:'79.08',geoAccuracy:5,consentGiven:true,status:'approved',answers:{'Question 1':'Answer A','Question 2':'Answer B'}};
   writeToDoc(USER_DOC_MAP[p.userId]||COMMON_DOC_ID,p);
+  saveMemoryRecord(p);
   Logger.log('Done. Check SC0101 doc.');
 }
 
