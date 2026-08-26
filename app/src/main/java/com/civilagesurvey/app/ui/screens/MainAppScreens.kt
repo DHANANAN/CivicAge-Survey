@@ -430,7 +430,28 @@ fun LoginScreen(viewModel: SurveyViewModel, onLogin: () -> Unit) {
             Text("Access Dashboard", fontWeight = FontWeight.Bold, fontSize = 16.sp)
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Guest Mode Access Button
+        OutlinedButton(
+            onClick = {
+                val guestName = name.trim().ifBlank { "Guest Surveyor" }
+                viewModel.signInWithIdPassword("GUEST", "guest", guestName) { success, _ ->
+                    if (success) {
+                        Toast.makeText(context, "Logged in as Guest Mode ($guestName)", Toast.LENGTH_SHORT).show()
+                        onLogin()
+                    }
+                }
+            },
+            modifier = Modifier.fillMaxWidth().height(50.dp),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF1E3A8A))
+        ) {
+            Icon(Icons.Default.PersonOutline, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Continue as Guest Mode", fontWeight = FontWeight.Bold)
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
 
         // ── v3.4: Master Login from Login Screen ───────────────────────────
         OutlinedButton(

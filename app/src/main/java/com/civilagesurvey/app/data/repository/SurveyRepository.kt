@@ -17,6 +17,27 @@ import java.net.URL
 class SurveyRepository(private val surveyDao: SurveyDao) {
     private val firestore = FirebaseFirestore.getInstance()
 
+    init {
+        ensureFirebaseAuth()
+    }
+
+    private fun ensureFirebaseAuth() {
+        try {
+            val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
+            if (auth.currentUser == null) {
+                auth.signInAnonymously().addOnCompleteListener { task ->
+                    if (task.isSuccessful) {
+                        android.util.Log.d("DCA_SYNC", "Firebase Anonymous Auth success: ${task.result?.user?.uid}")
+                    } else {
+                        android.util.Log.e("DCA_SYNC", "Firebase Auth failed: ${task.exception?.message}")
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("DCA_SYNC", "ensureFirebaseAuth error: ${e.message}")
+        }
+    }
+
     companion object {
         const val APPS_SCRIPT_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbziNNzXw3FPAdLiWEF_dbeqo2ThLuGWb-jUQpaHg2cLSt6G1GiCDckLQSXaGYMQa_YxFw/exec"
         const val DCA_SECRET_TOKEN = "DCA_SECRET_TOKEN_2026"
@@ -151,6 +172,7 @@ class SurveyRepository(private val surveyDao: SurveyDao) {
     ): Boolean = updateRecordStatus(surveyUid, newStatus, qaNotes, approvedBy)
 
     suspend fun syncRecordToFirestore(survey: SurveyEntity): Boolean {
+        ensureFirebaseAuth()
         return try {
             val recordMap = mutableMapOf<String, Any>(
                 "surveyUid" to survey.surveyUid,
@@ -188,8 +210,10 @@ class SurveyRepository(private val surveyDao: SurveyDao) {
                 .document(survey.surveyUid)
                 .set(recordMap, SetOptions.merge())
                 .await()
+            android.util.Log.d("DCA_SYNC", "syncRecordToFirestore success for record ${survey.surveyUid}")
             true
         } catch (e: Exception) {
+            android.util.Log.e("DCA_SYNC", "syncRecordToFirestore failed: ${e.message}")
             false
         }
     }
