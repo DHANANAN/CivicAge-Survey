@@ -1488,6 +1488,20 @@ class SurveyViewModel(
         }
     }
 
+    fun submitSurveyToMainDoc(survey: SurveyEntity, onResult: (Boolean) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val posted = repository.postRecordToAppsScript(survey)
+            if (posted) {
+                val updated = survey.copy(isSynced = true, updatedAt = System.currentTimeMillis())
+                repository.insertSurvey(updated)
+                kotlin.runCatching { repository.syncRecordToFirestore(updated) }
+            }
+            withContext(Dispatchers.Main) {
+                onResult(posted)
+            }
+        }
+    }
+
 
     fun rejectInstrument(surveyUid: String, qaNotes: String, onResult: (Boolean) -> Unit) {
         viewModelScope.launch {

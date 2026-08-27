@@ -41,10 +41,15 @@ function doPost(e){
     var p=JSON.parse(e.postData.contents);
     if(!p.token||p.token!==SECRET_TOKEN)return json({success:false,error:'Unauthorized'});
     var uid=(p.userId||'').toUpperCase().trim();
-    var docId=USER_DOC_MAP[uid]||COMMON_DOC_ID;
-    writeToDoc(docId,p);
+    var isApproved = (p.status||'').toLowerCase() === 'approved';
+    
+    // Initial submission from normal 25 users routes to Main SCSC Data Doc (COMMON_DOC_ID).
+    // Final approved submission from Master routes to the surveyor's dedicated Doc (e.g. SC0101 doc).
+    var docId = isApproved ? (USER_DOC_MAP[uid] || COMMON_DOC_ID) : COMMON_DOC_ID;
+    
+    writeToDoc(docId, p);
     saveMemoryRecord(p);
-    return json({success:true,docId:docId,recordId:p.recordId||'',routed:uid});
+    return json({success:true, docId:docId, recordId:p.recordId||'', routed:uid, approved:isApproved});
   }catch(ex){return json({success:false,error:ex.toString()});}
 }
 

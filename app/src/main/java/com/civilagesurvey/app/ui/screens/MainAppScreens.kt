@@ -511,6 +511,13 @@ fun HomeScreen(viewModel: SurveyViewModel, onNavigate: (String) -> Unit) {
     val draftCount by viewModel.draftCount.collectAsState()
     val syncedCount by viewModel.syncedCount.collectAsState()
     val userRole by viewModel.userRole.collectAsState()
+    val isMaster = userRole == Config.ROLE_MASTER || userRole == Config.ADMIN_ROLE
+
+    LaunchedEffect(isMaster) {
+        if (isMaster) {
+            viewModel.syncCloudRecordsToMaster()
+        }
+    }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
         if (userRole == Config.ROLE_MASTER || userRole == Config.ADMIN_ROLE) {
@@ -958,6 +965,13 @@ fun RecordsScreen(viewModel: SurveyViewModel) {
 
     val activeSurveys = surveys.filter { !archivedUids.contains(it.surveyUid) && it.participantName.contains(searchQuery, ignoreCase = true) }
 
+    // Auto-fetch cloud records whenever Master views the Records screen
+    LaunchedEffect(isMaster) {
+        if (isMaster) {
+            viewModel.syncCloudRecordsToMaster()
+        }
+    }
+
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
 
         if (isMaster) {
@@ -1027,10 +1041,10 @@ fun RecordsScreen(viewModel: SurveyViewModel) {
                                     }
                                 }
                             } else {
-                                // Student / Surveyor: Submit & Sync to Cloud & Doc
-                                viewModel.approveInstrument(s.surveyUid, "Submitted by Surveyor") { success, _ ->
+                                // Student / Surveyor: Submit & Sync to Main SCSC Doc (COMMON_DOC_ID)
+                                viewModel.submitSurveyToMainDoc(s) { success ->
                                     if (success) {
-                                        Toast.makeText(context, "Record submitted & synced successfully!", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "Submitted to Main SCSC Document!", Toast.LENGTH_SHORT).show()
                                     } else {
                                         Toast.makeText(context, "Submission failed. Check network.", Toast.LENGTH_SHORT).show()
                                     }
