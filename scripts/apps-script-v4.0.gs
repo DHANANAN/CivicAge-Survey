@@ -3,6 +3,14 @@
  * DCA Cloud Sync - Google Apps Script v4.0 (12 Surveyors + Master Doc)
  * Project: Smart Cities, Silent Citizens (ICSSR Major Research Project 2025-26)
  * Token: DCA_SECRET_TOKEN_2026
+ * 
+ * ROUTING SPECIFICATION:
+ * - Master Approval (status: 'approved'):
+ *     1. Full Instrument + All Responses / Transcripts written to Field Doc (SC0101 to SC0112).
+ *     2. Official Approval Audit Log written to Master Central Doc (COMMON_DOC_ID).
+ * - Surveyor Submission (status: 'submitted' / 'COMPLETED'):
+ *     - Stored in Memory Buffer for Master Control app review.
+ *     - Does NOT clutter Master Doc with unapproved drafts (prevents double copies).
  * ============================================================================
  */
 
@@ -84,63 +92,80 @@ function doPost(e) {
 // ── Routing Logic ───────────────────────────────────────────────────────────
 
 function processRecord(p) {
-  var uid = (p.userId || '').toUpperCase().trim();
-  var isApproved = (p.status || '').toLowerCase() === 'approved';
-
-  // ROUTING:
-  // - Approved by Master: Routes to surveyor's dedicated Doc (SC0101 to SC0112).
-  // - Submit / Pending: Routes to the Master Document.
-  var targetDocId = COMMON_DOC_ID;
-  var routeType = 'master';
-
-  if (isApproved && USER_DOC_MAP[uid]) {
-    targetDocId = USER_DOC_MAP[uid];
-    routeType = 'dedicated_' + uid;
+  // Robustly resolve surveyor ID
+  var uid = (p.userId || p.surveyorId || p.createdBy || '').toUpperCase().trim();
+  if (!USER_DOC_MAP[uid]) {
+    var match = (p.recordId || p.surveyUid || '').match(/SC01[0-1][0-9]/i);
+    if (match) uid = match[0].toUpperCase();
   }
 
-  var writeSuccess = false;
+  var isApproved = (p.status || '').toLowerCase() === 'approved';
+  var fieldDocId = USER_DOC_MAP[uid] || null;
+  var masterDocId = COMMON_DOC_ID;
+
+  var fieldDocWritten = false;
+  var masterDocWritten = false;
   var writeError = null;
 
-  try {
-    writeToDoc(targetDocId, p, isApproved);
-    writeSuccess = true;
-  } catch (ex) {
-    writeError = ex.toString();
-    // Fallback: If dedicated doc failed, try writing to master doc
-    if (targetDocId !== COMMON_DOC_ID) {
+  if (isApproved) {
+    // 1. Write FULL survey response into surveyor's dedicated Field Document (SC0101 to SC0112)
+    if (fieldDocId) {
       try {
-        writeToDoc(COMMON_DOC_ID, p, isApproved);
-        targetDocId = COMMON_DOC_ID;
-        writeSuccess = true;
-      } catch (ex2) {
-        writeError = ex2.toString();
+        writeFullSurveyToDoc(fieldDocId, p, true);
+        fieldDocWritten = true;
+      } catch (ex) {
+        writeError = 'Field Doc write error: ' + ex.toString();
       }
     }
+
+    // 2. Write official Approval Audit into Master Central Document (COMMON_DOC_ID)
+    try {
+      writeApprovalAuditToMasterDoc(masterDocId, p, fieldDocId);
+      masterDocWritten = true;
+    } catch (ex2) {
+      writeError = (writeError ? (writeError + ' | ') : '') + 'Master Doc write error: ' + ex2.toString();
+    }
+
+    // Fallback: If dedicated doc failed or is unmapped, ensure full survey is written to master doc
+    if (!fieldDocWritten && !masterDocWritten) {
+      try {
+        writeFullSurveyToDoc(masterDocId, p, true);
+        masterDocWritten = true;
+      } catch (ex3) {
+        writeError = (writeError ? (writeError + ' | ') : '') + 'Fallback write error: ' + ex3.toString();
+      }
+    }
+  } else {
+    // SUBMISSION (Pending Approval):
+    // Saved to memory buffer for real-time Master Board inspection.
+    // Does NOT write full draft copies to Google Docs to avoid duplicate copies.
   }
 
-  saveMemoryRecord(p, isApproved, targetDocId);
+  saveMemoryRecord(p, isApproved, fieldDocId || masterDocId);
 
   return {
-    success: writeSuccess,
-    recordId: p.recordId || '',
+    success: isApproved ? (fieldDocWritten || masterDocWritten) : true,
+    recordId: p.recordId || p.surveyUid || '',
     userId: uid,
     status: p.status || 'draft',
     approved: isApproved,
-    docId: targetDocId,
-    route: routeType,
+    fieldDocId: fieldDocId,
+    masterDocId: masterDocId,
+    fieldDocWritten: fieldDocWritten,
+    masterDocWritten: masterDocWritten,
     error: writeError
   };
 }
 
-// ── Document Formatter ──────────────────────────────────────────────────────
+// ── Document Formatter: Field Document (Full Survey with Responses) ──────────
 
-function writeToDoc(docId, p, isApproved) {
+function writeFullSurveyToDoc(docId, p, isApproved) {
   var doc = DocumentApp.openById(docId);
   var body = doc.getBody();
   var ts = Utilities.formatDate(new Date(), 'Asia/Kolkata', "dd-MMM-yyyy HH:mm:ss 'IST'");
 
   var badge = isApproved ? ' [APPROVED BY MASTER]' : ' [SUBMITTED - PENDING APPROVAL]';
-  var header = '[' + (p.instrumentType || 'Survey') + '] ' + (p.displayName || p.userId || 'Unknown') + ' | ' + (p.city || 'ND') + ' | ' + ts + badge;
+  var header = '[' + (p.instrumentType || 'Survey') + '] ' + (p.displayName || p.userId || 'Field Investigator') + ' | ' + (p.city || 'ND') + ' | ' + ts + badge;
 
   body.appendParagraph('================================================================')
       .setHeading(DocumentApp.ParagraphHeading.NORMAL);
@@ -148,32 +173,94 @@ function writeToDoc(docId, p, isApproved) {
   body.appendParagraph(header).setHeading(DocumentApp.ParagraphHeading.HEADING2);
 
   var meta = 
-    'Record ID:   ' + (p.recordId || '-') +
-    '\nSurveyor:    ' + (p.userId || '-') + ' (' + (p.displayName || 'Field Investigator') + ')' +
-    '\nCity:        ' + (p.city || 'ND') +
-    '\nGPS Lat/Lng: ' + (p.geoLat || '0') + ', ' + (p.geoLng || '0') + ' (+/-' + Math.round(p.geoAccuracy || 0) + 'm)' +
-    '\nConsent:     ' + (p.consentGiven ? 'YES - Consented & Signed' : 'NO') +
-    '\nStatus:      ' + (p.status || 'submitted') +
-    (p.approvedBy ? ('\nApproved By: ' + p.approvedBy) : '');
+    'Record ID:    ' + (p.recordId || p.surveyUid || '-') +
+    '\nSurveyor:     ' + (p.userId || '-') + ' (' + (p.displayName || 'Field Investigator') + ')' +
+    '\nParticipant:  ' + (p.participantName || 'Anonymous') + (p.participantAge ? (' (Age: ' + p.participantAge + ')') : '') +
+    '\nCity/Locale:  ' + (p.city || 'ND') + (p.manualLocality ? (' - ' + p.manualLocality) : '') +
+    '\nGPS Lat/Lng:  ' + (p.geoLat || '0') + ', ' + (p.geoLng || '0') + ' (+/-' + Math.round(p.geoAccuracy || 0) + 'm)' +
+    '\nConsent:      ' + (p.consentGiven ? 'YES - Consented & Signed' : 'NO') +
+    '\nStatus:       ' + (p.status || 'approved') +
+    (p.approvedBy ? ('\nApproved By:  ' + p.approvedBy) : '') +
+    (p.qaNotes ? ('\nQA Notes:     ' + p.qaNotes) : '');
 
   body.appendParagraph(meta).setHeading(DocumentApp.ParagraphHeading.NORMAL);
 
+  // 1. Output Structured Answers / Themes
   var ans = p.answers;
-  if (ans) {
-    body.appendParagraph('-- Responses --').setHeading(DocumentApp.ParagraphHeading.HEADING3);
-    if (typeof ans === 'object' && !Array.isArray(ans)) {
-      var keys = Object.keys(ans);
-      for (var i = 0; i < keys.length; i++) {
-        var v = ans[keys[i]];
+  var hasAnswers = false;
+
+  if (ans && typeof ans === 'object' && !Array.isArray(ans)) {
+    var keys = Object.keys(ans);
+    // Filter out internal system keys like __intake_...
+    var visibleKeys = keys.filter(function(k) { return !k.startsWith('__intake_'); });
+    if (visibleKeys.length > 0) {
+      hasAnswers = true;
+      body.appendParagraph('-- Responses & Observations --').setHeading(DocumentApp.ParagraphHeading.HEADING3);
+      for (var i = 0; i < visibleKeys.length; i++) {
+        var k = visibleKeys[i];
+        var v = ans[k];
         if (v !== null && v !== undefined && String(v).trim() !== '') {
-          body.appendParagraph('Q: ' + keys[i] + '\nA: ' + String(v)).setHeading(DocumentApp.ParagraphHeading.NORMAL);
+          body.appendParagraph('Q: ' + k + '\nA: ' + String(v)).setHeading(DocumentApp.ParagraphHeading.NORMAL);
         }
       }
-    } else if (typeof ans === 'string' && ans.trim().length > 0) {
-      body.appendParagraph(ans);
+    }
+  } else if (typeof ans === 'string' && ans.trim().length > 0) {
+    hasAnswers = true;
+    body.appendParagraph('-- Responses --').setHeading(DocumentApp.ParagraphHeading.HEADING3);
+    body.appendParagraph(ans).setHeading(DocumentApp.ParagraphHeading.NORMAL);
+  }
+
+  // 2. Output Interview Transcript if available
+  if (p.transcriptText && String(p.transcriptText).trim().length > 0) {
+    var transcriptAlreadyPrinted = ans && ans['Interview Notes & Transcript'] && 
+        String(ans['Interview Notes & Transcript']).trim() === String(p.transcriptText).trim();
+    if (!transcriptAlreadyPrinted) {
+      body.appendParagraph('-- Interview Transcript & Field Notes --').setHeading(DocumentApp.ParagraphHeading.HEADING3);
+      body.appendParagraph(String(p.transcriptText).trim()).setHeading(DocumentApp.ParagraphHeading.NORMAL);
     }
   }
 
+  // 3. Output Field Summary if available
+  if (p.manualSummary && String(p.manualSummary).trim().length > 0) {
+    body.appendParagraph('-- Field Summary & Observations --').setHeading(DocumentApp.ParagraphHeading.HEADING3);
+    body.appendParagraph(String(p.manualSummary).trim()).setHeading(DocumentApp.ParagraphHeading.NORMAL);
+  }
+
+  body.appendParagraph(' ');
+}
+
+// ── Document Formatter: Master Document (Approval Audit Entry) ───────────────
+
+function writeApprovalAuditToMasterDoc(docId, p, fieldDocId) {
+  var doc = DocumentApp.openById(docId);
+  var body = doc.getBody();
+  var ts = Utilities.formatDate(new Date(), 'Asia/Kolkata', "dd-MMM-yyyy HH:mm:ss 'IST'");
+
+  var header = '[APPROVAL AUDIT] [' + (p.instrumentType || 'Survey') + '] Surveyor: ' + (p.userId || '-') + ' (' + (p.displayName || 'Field Investigator') + ') | ' + (p.city || 'ND') + ' | ' + ts + ' [APPROVED BY MASTER]';
+
+  body.appendParagraph('================================================================')
+      .setHeading(DocumentApp.ParagraphHeading.NORMAL);
+
+  body.appendParagraph(header).setHeading(DocumentApp.ParagraphHeading.HEADING2);
+
+  var fieldDocUrl = fieldDocId ? ('https://docs.google.com/document/d/' + fieldDocId + '/edit') : 'Common Document';
+
+  var audit = 
+    'Record ID:       ' + (p.recordId || p.surveyUid || '-') +
+    '\nSurveyor ID:     ' + (p.userId || '-') +
+    '\nSurveyor Name:   ' + (p.displayName || 'Field Investigator') +
+    '\nInstrument:      ' + (p.instrumentType || 'Survey') +
+    '\nCity:            ' + (p.city || 'ND') + (p.manualLocality ? (' - ' + p.manualLocality) : '') +
+    '\nParticipant:     ' + (p.participantName || 'Anonymous') + (p.participantAge ? (' (Age: ' + p.participantAge + ')') : '') +
+    '\nGPS Coordinates: ' + (p.geoLat || '0') + ', ' + (p.geoLng || '0') + ' (+/-' + Math.round(p.geoAccuracy || 0) + 'm)' +
+    '\nConsent Given:   ' + (p.consentGiven ? 'YES - Consented & Signed' : 'NO') +
+    '\nStatus:          APPROVED' +
+    '\nApproved By:     ' + (p.approvedBy || 'Master Administrator') +
+    '\nApproved At:     ' + ts +
+    (p.qaNotes ? ('\nQA Review Notes: ' + p.qaNotes) : '') +
+    '\nField Doc Link:  ' + fieldDocUrl;
+
+  body.appendParagraph(audit).setHeading(DocumentApp.ParagraphHeading.NORMAL);
   body.appendParagraph(' ');
 }
 
@@ -184,14 +271,23 @@ function saveMemoryRecord(p, isApproved, docId) {
     var props = PropertiesService.getScriptProperties();
     var list = JSON.parse(props.getProperty('DCA_RECORDS_V40') || '[]');
     list.unshift({
-      recordId: p.recordId || ('REC-' + Date.now()),
+      recordId: p.recordId || p.surveyUid || ('REC-' + Date.now()),
+      surveyUid: p.recordId || p.surveyUid || '',
       userId: p.userId || '',
+      surveyorId: p.userId || '',
       displayName: p.displayName || '',
+      surveyorName: p.displayName || '',
       city: p.city || '',
       instrumentType: p.instrumentType || '',
       status: p.status || 'submitted',
       approved: isApproved,
+      approvedBy: p.approvedBy || '',
+      qaNotes: p.qaNotes || '',
       docId: docId,
+      participantName: p.participantName || '',
+      answersJson: (typeof p.answers === 'object') ? JSON.stringify(p.answers) : (p.answers || '{}'),
+      transcriptText: p.transcriptText || '',
+      manualSummary: p.manualSummary || '',
       timestamp: new Date().toISOString()
     });
     if (list.length > 200) list = list.slice(0, 200);
@@ -218,15 +314,21 @@ function testWrite() {
     token: SECRET_TOKEN,
     recordId: 'TEST-V40-' + Date.now(),
     userId: 'SC0101',
-    displayName: 'Test Investigator',
+    displayName: 'Test Investigator SC0101',
     city: 'Nagpur',
-    instrumentType: 'Test Instrument',
+    instrumentType: 'SSI-NGO-v1.0',
     geoLat: '21.1458',
     geoLng: '79.0882',
     geoAccuracy: 10,
     consentGiven: true,
-    status: 'submitted',
-    answers: { 'Question 1': 'Response A', 'Question 2': 'Response B' }
+    status: 'approved',
+    approvedBy: 'Master Administrator',
+    qaNotes: 'Verified and approved',
+    answers: { 
+      '[Theme T1] NGO Advocacy, Case Support, and Field Experience': 'Organization operates 5 field teams providing digital case support for seniors 75+.' 
+    },
+    transcriptText: 'Full transcript of NGO interview conducted at Central Nagpur branch.',
+    manualSummary: 'Critical digital exclusion identified in bus pass renewal system.'
   };
   var res = processRecord(p);
   Logger.log('Result: ' + JSON.stringify(res));

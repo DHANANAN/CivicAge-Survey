@@ -132,9 +132,14 @@ class SurveyRepository(private val surveyDao: SurveyDao) {
         approvedBy: String = ""
     ): Boolean {
         val existing = surveyDao.getSurveyById(surveyUid) ?: return false
+        val resolvedSurveyorId = existing.surveyorId.ifBlank { existing.createdBy }.ifBlank {
+            val match = Regex("SC01[0-1][0-9]", RegexOption.IGNORE_CASE).find(existing.surveyUid)
+            match?.value?.uppercase() ?: ""
+        }
         val updated = existing.copy(
             status = newStatus,
             qaNotes = qaNotes,
+            surveyorId = resolvedSurveyorId,
             approvedBy = if (newStatus == "approved") approvedBy else existing.approvedBy,
             approvedAt = if (newStatus == "approved") System.currentTimeMillis() else existing.approvedAt,
             updatedAt = System.currentTimeMillis()
@@ -142,16 +147,19 @@ class SurveyRepository(private val surveyDao: SurveyDao) {
         surveyDao.insertSurvey(updated)
 
         // Trigger immediate Drive push via Apps Script if approved
+        var postSuccess = true
         if (newStatus == "approved") {
-            kotlin.runCatching {
+            postSuccess = kotlin.runCatching {
                 postRecordToAppsScript(updated)
-            }
+            }.getOrDefault(false)
         }
 
         return try {
             val updateMap = mutableMapOf<String, Any>(
                 "status" to newStatus,
                 "qaNotes" to qaNotes,
+                "surveyorId" to resolvedSurveyorId,
+                "userId" to resolvedSurveyorId,
                 "updatedAt" to System.currentTimeMillis()
             )
             if (newStatus == "approved") {
@@ -162,9 +170,13 @@ class SurveyRepository(private val surveyDao: SurveyDao) {
                 .document(surveyUid)
                 .set(updateMap, SetOptions.merge())
                 .await()
-            true
+            firestore.collection("surveyResponses")
+                .document(surveyUid)
+                .set(updateMap, SetOptions.merge())
+                .await()
+            postSuccess
         } catch (e: Exception) {
-            false
+            postSuccess
         }
     }
 
@@ -178,15 +190,23 @@ class SurveyRepository(private val surveyDao: SurveyDao) {
     suspend fun syncRecordToFirestore(survey: SurveyEntity): Boolean {
         ensureFirebaseAuth()
         return try {
+            val resolvedSurveyorId = survey.surveyorId.ifBlank { survey.createdBy }.ifBlank {
+                val match = Regex("SC01[0-1][0-9]", RegexOption.IGNORE_CASE).find(survey.surveyUid)
+                match?.value?.uppercase() ?: ""
+            }
             val recordMap = mutableMapOf<String, Any>(
                 "surveyUid" to survey.surveyUid,
                 "recordId" to survey.surveyUid,
-                "surveyorId" to survey.surveyorId,
-                "userId" to survey.surveyorId,
+                "surveyorId" to resolvedSurveyorId,
+                "userId" to resolvedSurveyorId,
                 "surveyorName" to survey.surveyorName,
                 "displayName" to survey.surveyorName,
                 "participantName" to survey.participantName,
+                "participantAge" to survey.participantAge,
+                "participantGender" to survey.participantGender,
+                "participantPhone" to survey.participantPhone,
                 "city" to survey.city,
+                "manualLocality" to survey.manualLocality,
                 "instrumentType" to survey.instrumentType,
                 "latitude" to survey.latitude,
                 "longitude" to survey.longitude,
@@ -199,10 +219,16 @@ class SurveyRepository(private val surveyDao: SurveyDao) {
                 "status" to survey.status,
                 "answersJson" to (survey.answersJson ?: ""),
                 "answers" to (survey.answersJson ?: ""),
+                "transcriptText" to (survey.transcriptText ?: ""),
+                "reviewedTranscriptText" to (survey.reviewedTranscriptText ?: ""),
+                "manualSummary" to (survey.manualSummary ?: ""),
+                "approvedBy" to (survey.approvedBy ?: ""),
+                "approvedAt" to survey.approvedAt,
+                "qaNotes" to (survey.qaNotes ?: ""),
                 "createdAt" to survey.createdAt,
                 "updatedAt" to survey.updatedAt,
                 "isSynced" to survey.isSynced,
-                "createdBy" to survey.createdBy
+                "createdBy" to (survey.createdBy.ifBlank { resolvedSurveyorId })
             )
             // Write to surveyResponses — picked up by Master real-time listener
             firestore.collection("surveyResponses")
@@ -230,12 +256,32 @@ class SurveyRepository(private val surveyDao: SurveyDao) {
                 JSONObject().put("rawAnswers", survey.answersJson ?: "")
             }
 
+            // Include interview notes & transcripts for qualitative instruments
+            if (survey.transcriptText.isNotBlank()) {
+                answersObj.put("Interview Notes & Transcript", survey.transcriptText)
+            }
+            if (survey.reviewedTranscriptText.isNotBlank() && survey.reviewedTranscriptText != survey.transcriptText) {
+                answersObj.put("Reviewed Transcript", survey.reviewedTranscriptText)
+            }
+            if (survey.manualSummary.isNotBlank()) {
+                answersObj.put("Field Summary", survey.manualSummary)
+            }
+
+            val resolvedUserId = survey.surveyorId.ifBlank { survey.createdBy }.ifBlank {
+                val match = Regex("SC01[0-1][0-9]", RegexOption.IGNORE_CASE).find(survey.surveyUid)
+                match?.value?.uppercase() ?: ""
+            }
+
             val payload = JSONObject()
                 .put("token", DCA_SECRET_TOKEN)
                 .put("recordId", survey.surveyUid)
-                .put("userId", survey.surveyorId)
-                .put("displayName", survey.surveyorName)
+                .put("surveyUid", survey.surveyUid)
+                .put("userId", resolvedUserId)
+                .put("surveyorId", resolvedUserId)
+                .put("createdBy", survey.createdBy.ifBlank { resolvedUserId })
+                .put("displayName", survey.surveyorName.ifBlank { "Field Investigator $resolvedUserId" })
                 .put("city", survey.city.ifBlank { "ND" })
+                .put("manualLocality", survey.manualLocality)
                 .put("instrumentType", survey.instrumentType.ifBlank { "General_Survey" })
                 .put("geoLat", survey.latitude)
                 .put("geoLng", survey.longitude)
@@ -243,6 +289,15 @@ class SurveyRepository(private val surveyDao: SurveyDao) {
                 .put("geoTimestamp", survey.geoTimestamp)
                 .put("consentGiven", survey.consentGiven)
                 .put("status", survey.status)
+                .put("approvedBy", survey.approvedBy)
+                .put("approvedAt", survey.approvedAt)
+                .put("qaNotes", survey.qaNotes)
+                .put("participantName", survey.participantName)
+                .put("participantAge", survey.participantAge)
+                .put("participantGender", survey.participantGender)
+                .put("participantPhone", survey.participantPhone)
+                .put("transcriptText", survey.transcriptText)
+                .put("manualSummary", survey.manualSummary)
                 .put("answers", answersObj)
 
             val body = payload.toString().toByteArray(Charsets.UTF_8)
@@ -320,6 +375,32 @@ class SurveyRepository(private val surveyDao: SurveyDao) {
 
     private var realTimeListenerRegistration: com.google.firebase.firestore.ListenerRegistration? = null
 
+    /** Safely upserts a remote survey without overwriting existing local data with empty strings. */
+    suspend fun upsertPreservingLocal(entity: SurveyEntity) {
+        val existing = surveyDao.getSurveyById(entity.surveyUid)
+        val toInsert = if (existing != null) {
+            existing.copy(
+                status = entity.status.ifBlank { existing.status },
+                qaNotes = entity.qaNotes.ifBlank { existing.qaNotes },
+                approvedBy = entity.approvedBy.ifBlank { existing.approvedBy },
+                approvedAt = if (entity.approvedAt > 0L) entity.approvedAt else existing.approvedAt,
+                answersJson = if (entity.answersJson.isNotBlank() && entity.answersJson != "{}") entity.answersJson else existing.answersJson,
+                transcriptText = entity.transcriptText.ifBlank { existing.transcriptText },
+                reviewedTranscriptText = entity.reviewedTranscriptText.ifBlank { existing.reviewedTranscriptText },
+                manualSummary = entity.manualSummary.ifBlank { existing.manualSummary },
+                surveyorId = entity.surveyorId.ifBlank { existing.surveyorId },
+                surveyorName = entity.surveyorName.ifBlank { existing.surveyorName },
+                participantName = entity.participantName.ifBlank { existing.participantName },
+                city = entity.city.ifBlank { existing.city },
+                manualLocality = entity.manualLocality.ifBlank { existing.manualLocality },
+                updatedAt = maxOf(entity.updatedAt, existing.updatedAt)
+            )
+        } else {
+            entity
+        }
+        surveyDao.insertSurvey(toInsert)
+    }
+
     /** Starts real-time cloud data tunnel listener for survey responses. Automatically upserts received surveys into Room. */
     fun startRealtimeFirestoreSync(onRecordReceived: (SurveyEntity) -> Unit = {}) {
         stopRealtimeFirestoreSync()
@@ -332,7 +413,7 @@ class SurveyRepository(private val surveyDao: SurveyDao) {
                         val entity = parseSurveyFromMap(data)
                         if (entity != null) {
                             kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
-                                surveyDao.insertSurvey(entity)
+                                upsertPreservingLocal(entity)
                                 onRecordReceived(entity)
                             }
                         }
@@ -361,7 +442,7 @@ class SurveyRepository(private val surveyDao: SurveyDao) {
                 val data = doc.data ?: continue
                 val entity = parseSurveyFromMap(data)
                 if (entity != null) {
-                    surveyDao.insertSurvey(entity)
+                    upsertPreservingLocal(entity)
                     count++
                 }
             }
@@ -370,7 +451,7 @@ class SurveyRepository(private val surveyDao: SurveyDao) {
                 val data = doc.data ?: continue
                 val entity = parseSurveyFromMap(data)
                 if (entity != null) {
-                    surveyDao.insertSurvey(entity)
+                    upsertPreservingLocal(entity)
                     count++
                 }
             }
@@ -429,7 +510,7 @@ class SurveyRepository(private val surveyDao: SurveyDao) {
                             }
                             val entity = parseSurveyFromMap(map)
                             if (entity != null) {
-                                surveyDao.insertSurvey(entity)
+                                upsertPreservingLocal(entity)
                                 count++
                             }
                         }
@@ -450,11 +531,17 @@ class SurveyRepository(private val surveyDao: SurveyDao) {
         val surveyUid = (data["surveyUid"] ?: data["recordId"]) as? String ?: return null
         if (surveyUid.isBlank()) return null
 
+        val rawSurveyorId = (data["surveyorId"] as? String) ?: (data["userId"] as? String) ?: (data["createdBy"] as? String) ?: ""
+        val resolvedSurveyorId = rawSurveyorId.ifBlank {
+            val match = Regex("SC01[0-1][0-9]", RegexOption.IGNORE_CASE).find(surveyUid)
+            match?.value?.uppercase() ?: ""
+        }
+
         return SurveyEntity(
             surveyUid = surveyUid,
             createdAt = (data["createdAt"] as? Number)?.toLong() ?: (data["geoTimestamp"] as? Number)?.toLong() ?: System.currentTimeMillis(),
             updatedAt = (data["updatedAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
-            createdBy = (data["createdBy"] as? String) ?: (data["surveyorId"] as? String) ?: "",
+            createdBy = (data["createdBy"] as? String) ?: resolvedSurveyorId,
             status = (data["status"] as? String) ?: "COMPLETED",
             consentGiven = (data["consentGiven"] as? Boolean) ?: true,
             participantName = (data["participantName"] as? String) ?: "",
@@ -473,13 +560,17 @@ class SurveyRepository(private val surveyDao: SurveyDao) {
             instrumentType = (data["instrumentType"] as? String) ?: "General_Survey",
             answersJson = (data["answersJson"] as? String) ?: (data["answers"] as? String) ?: "{}",
             transcriptText = (data["transcriptText"] as? String) ?: "",
+            reviewedTranscriptText = (data["reviewedTranscriptText"] as? String) ?: (data["transcriptText"] as? String) ?: "",
             manualSummary = (data["manualSummary"] as? String) ?: "",
+            qaNotes = (data["qaNotes"] as? String) ?: "",
+            approvedBy = (data["approvedBy"] as? String) ?: "",
+            approvedAt = (data["approvedAt"] as? Number)?.toLong() ?: 0L,
             issueCategory = (data["issueCategory"] as? String) ?: "Other",
             manualUrgency = (data["manualUrgency"] as? String) ?: "Low",
             isSynced = true,
             lastSyncedAt = System.currentTimeMillis(),
-            surveyorId = (data["surveyorId"] as? String) ?: (data["userId"] as? String) ?: "",
-            surveyorName = (data["surveyorName"] as? String) ?: (data["displayName"] as? String) ?: ""
+            surveyorId = resolvedSurveyorId,
+            surveyorName = (data["surveyorName"] as? String) ?: (data["displayName"] as? String) ?: "Field Investigator $resolvedSurveyorId"
         )
     }
 }

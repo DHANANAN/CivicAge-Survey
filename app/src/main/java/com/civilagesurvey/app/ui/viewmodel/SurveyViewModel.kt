@@ -519,7 +519,12 @@ class SurveyViewModel(
         currentInterviewIndex.value = 0
         showThemesPhase.value = instrument.sections.isEmpty() && instrument.themes.isNotEmpty()
         
-        val uid = "$pCode-${instrument.code}-S${System.currentTimeMillis()}"
+        val sId = surveyorId.value.ifBlank { "SC0101" }
+        val effectivePCode = pCode.ifBlank {
+            val cityPrefix = selectedCity.value.ifBlank { "ND" }
+            "$cityPrefix-$sId"
+        }
+        val uid = "$effectivePCode-${instrument.code}-S${System.currentTimeMillis()}"
         
         val answersMap = mutableMapOf<String, String>()
         answersMap["__intake_location_status"] = intakeLocationStatus.value
@@ -840,20 +845,28 @@ class SurveyViewModel(
     private fun compileTranscripts() {
         val current = activeSurvey.value ?: return
         val inst = currentInstrument.value
-        val answers = getAnswersMap(current.answersJson)
+        val answers = getAnswersMap(current.answersJson).toMutableMap()
         val compiled = buildString {
             if (inst != null && inst.themes.isNotEmpty()) {
                 inst.themes.forEachIndexed { index, theme ->
+                    val ansText = interviewAnswers.value[index] ?: ""
                     appendLine("Theme ${theme.code}: ${theme.title}")
                     appendLine("Q: ${theme.openingQuestion}")
-                    appendLine("A: ${interviewAnswers.value[index] ?: "No response"}")
+                    appendLine("A: ${if (ansText.isNotBlank()) ansText else "No response"}")
                     
+                    if (ansText.isNotBlank()) {
+                        answers["[Theme ${theme.code}] ${theme.title} - ${theme.openingQuestion}"] = ansText
+                    }
+
                     val selectedProbes = mutableListOf<String>()
                     theme.probes.forEachIndexed { pIndex, probe ->
                         val isSelected = answers["probe_selected_${theme.code}_$pIndex"] == "true"
                         if (isSelected) {
                             val resp = answers["probe_response_${theme.code}_$pIndex"] ?: ""
                             selectedProbes.add("  * Follow-up: $probe\n    Response: $resp")
+                            if (resp.isNotBlank()) {
+                                answers["[Probe] ${theme.code}.${pIndex + 1}: $probe"] = resp
+                            }
                         }
                     }
                     if (selectedProbes.isNotEmpty()) {
@@ -865,13 +878,23 @@ class SurveyViewModel(
             } else {
                 val prompts = inst?.themes?.map { it.openingQuestion } ?: interviewPrompts
                 prompts.forEachIndexed { index, prompt ->
+                    val ansText = interviewAnswers.value[index] ?: ""
                     appendLine("Q: $prompt")
-                    appendLine("A: ${interviewAnswers.value[index] ?: "No response"}")
+                    appendLine("A: ${if (ansText.isNotBlank()) ansText else "No response"}")
                     appendLine()
+                    if (ansText.isNotBlank()) {
+                        answers["Question ${index + 1}: $prompt"] = ansText
+                    }
                 }
             }
         }
-        val updated = current.copy(transcriptText = compiled, reviewedTranscriptText = compiled, updatedAt = System.currentTimeMillis())
+        val updatedAnswersJson = answersAdapter.toJson(answers) ?: "{}"
+        val updated = current.copy(
+            transcriptText = compiled,
+            reviewedTranscriptText = compiled,
+            answersJson = updatedAnswersJson,
+            updatedAt = System.currentTimeMillis()
+        )
         viewModelScope.launch {
             repository.insertSurvey(updated)
             activeSurvey.value = updated
@@ -1471,18 +1494,14 @@ class SurveyViewModel(
             )
             com.civilagesurvey.app.telemetry.TelemetryManager.logQaAction(surveyUid, "approve", surveyorEmail.value)
 
-            // Post to Apps Script → routes to the correct per-user Google Doc
+            // Resolve target Google Doc URL for opening in browser
             var docUrl: String? = null
             if (success) {
                 val survey = repository.getSurveyById(surveyUid)
                 if (survey != null) {
-                    // Resolve the right doc URL for this surveyor's ID (v3.3 routing)
-                    val targetDocUrl = com.civilagesurvey.app.data.repository.SurveyRepository
-                        .docUrlForUser(survey.surveyorId)
-                    docUrl = kotlin.runCatching {
-                        repository.postRecordToAppsScript(survey)
-                        targetDocUrl
-                    }.getOrNull()
+                    val resolvedId = survey.surveyorId.ifBlank { survey.createdBy }
+                    docUrl = com.civilagesurvey.app.data.repository.SurveyRepository
+                        .docUrlForUser(resolvedId)
                 }
             }
             onResult(success, docUrl)
