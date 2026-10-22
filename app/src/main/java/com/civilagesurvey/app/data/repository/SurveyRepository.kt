@@ -18,47 +18,51 @@ class SurveyRepository(private val surveyDao: SurveyDao) {
     private val firestore = FirebaseFirestore.getInstance()
 
     init {
-        ensureFirebaseAuth()
-    }
-
-    private fun ensureFirebaseAuth() {
         try {
             val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
             if (auth.currentUser == null) {
-                auth.signInAnonymously().addOnCompleteListener { task ->
-                    if (task.isSuccessful) {
-                        android.util.Log.d("DCA_SYNC", "Firebase Anonymous Auth success: ${task.result?.user?.uid}")
-                    } else {
-                        android.util.Log.e("DCA_SYNC", "Firebase Auth failed: ${task.exception?.message}")
-                    }
-                }
+                auth.signInAnonymously()
             }
         } catch (e: Exception) {
+            android.util.Log.e("DCA_SYNC", "init auth error: ${e.message}")
+        }
+    }
+
+    suspend fun ensureFirebaseAuth(): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
+            if (auth.currentUser != null) return@withContext true
+            val task = auth.signInAnonymously().await()
+            val uid = task.user?.uid
+            android.util.Log.d("DCA_SYNC", "Firebase Anonymous Auth success: $uid")
+            uid != null
+        } catch (e: Exception) {
             android.util.Log.e("DCA_SYNC", "ensureFirebaseAuth error: ${e.message}")
+            false
         }
     }
 
     companion object {
-        const val APPS_SCRIPT_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbziNNzXw3FPAdLiWEF_dbeqo2ThLuGWb-jUQpaHg2cLSt6G1GiCDckLQSXaGYMQa_YxFw/exec"
+        const val APPS_SCRIPT_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxJl6uhLpqFa-QkHuc9GFCrwTKaN_ju9JHbA-sy7O22pRrO9VzOJtsNqI4ZMdsrlyhb/exec"
         const val DCA_SECRET_TOKEN = "DCA_SECRET_TOKEN_2026"
 
         // Fallback / common doc (SC0113+ and unrecognised IDs)
-        const val GOOGLE_DOC_URL = "https://docs.google.com/document/d/10U1MCP3_neriSMV47ch7OAD15Ev2FgtQjLW8svfXraQ/edit"
+        const val GOOGLE_DOC_URL = "https://docs.google.com/document/d/1pqmSuvsDRqnEQ-Yxw4Mh27-gYAEguwyLdrR6WvCCRU8/edit"
 
         /** Per-user dedicated docs for SC0101–SC0112 (matches Apps Script routing). */
         val USER_DOC_URL_MAP: Map<String, String> = mapOf(
-            "SC0101" to "https://docs.google.com/document/d/1wdTMizfwXXqYpsy5NPxYCug-I7vRACsWZZZ7KmtWF3w/edit",
-            "SC0102" to "https://docs.google.com/document/d/1Munad_OGvWbRuav4VfeK9KKXHVEYBAkAhpo0hRfVGzo/edit",
-            "SC0103" to "https://docs.google.com/document/d/1WINw7vf7QfoufrYBVpM8200xX1R7u2QOIMcByX6yhok/edit",
-            "SC0104" to "https://docs.google.com/document/d/1Lb7_4ZhSGTjIiaonoiCXF6IYd4stNHPYEqCRtHCGZ6M/edit",
-            "SC0105" to "https://docs.google.com/document/d/1wXeElRpfh8scbRIgAGuqxhHt-gM6a_CViqM-05TDhaw/edit",
-            "SC0106" to "https://docs.google.com/document/d/1uay6xdP1luqggV141ywnYy9ibAXIGkPrfCYmu0ENnvY/edit",
-            "SC0107" to "https://docs.google.com/document/d/1QGHiZyEmALLSYfCPbO8smupd3_FKKTFGcx0Tfm8YEzA/edit",
-            "SC0108" to "https://docs.google.com/document/d/1TaWWC9xLOY1pJW4QXSjXOA9Ml89CKzD1VS_THRQAKZk/edit",
-            "SC0109" to "https://docs.google.com/document/d/1F5HJ0rUOunJqOb7dipPyUFSyt2L0lgtjZHFxbtTahxA/edit",
-            "SC0110" to "https://docs.google.com/document/d/1LfTkNS2UEVNGQMkv1FPrp4uuPK3NxOBLFhJuiD64i_M/edit",
-            "SC0111" to "https://docs.google.com/document/d/1rXfwAA5EacdrUr_ygMo4M9-n3ugydPYkkQ3IO_lAyR0/edit",
-            "SC0112" to "https://docs.google.com/document/d/1RkN84SXU1_HH_Cny_KSi4-_lOy5FwmRWp7095KbdgoQ/edit"
+            "SC0101" to "https://docs.google.com/document/d/1f6YxXWVt35bMnJsNzuHwzObN3N87WKsC38DAvIw4eCk/edit",
+            "SC0102" to "https://docs.google.com/document/d/1BMMXDiXvr95y17S_zvIsjI98Bg5FnY7Ks3OCj6mLlPo/edit",
+            "SC0103" to "https://docs.google.com/document/d/15wneFqNQz3OPL_tgMfnUY1JB_cFna6aNwzqxndRGaNs/edit",
+            "SC0104" to "https://docs.google.com/document/d/1YQccrd6KBvwUpa4fXRY9UpY_-XkKiNHkktGT-9FPHdU/edit",
+            "SC0105" to "https://docs.google.com/document/d/1hdtjT4itfIoHE8IUkYG7t4P6sZqt9g96Uinn_jcRNBk/edit",
+            "SC0106" to "https://docs.google.com/document/d/1VpSDVbP1Gw7KnWbb6FI4DGLycOprmv1xTz2OW9nS8lc/edit",
+            "SC0107" to "https://docs.google.com/document/d/1pJa9BoLLdc6Px0cmg02Zscm0k-ANaOjp0buY0LwopuM/edit",
+            "SC0108" to "https://docs.google.com/document/d/1ANCJrhiSAouc98XXhQR2waDEAV7rgHHxI1TX48Ddx1A/edit",
+            "SC0109" to "https://docs.google.com/document/d/1mL4maU2XkhKfTBeEXW2pElS_8ZTTzLFGsIHpHMfQ6LU/edit",
+            "SC0110" to "https://docs.google.com/document/d/1U_wBWwYESM4MZsi0c-Ifbbl66dyZ5sTCF34_ZteG6Hc/edit",
+            "SC0111" to "https://docs.google.com/document/d/1B6d4Chay-Q0Dxu6y9CD0gQsqo2LfcQhAR-Em0HBfQ4Q/edit",
+            "SC0112" to "https://docs.google.com/document/d/1qUnuEa_EjtEqXMQ88dlCOSSPgt9RfdF_vZPU50taV3g/edit"
         )
 
         /** Returns the target Google Doc URL for the given surveyor ID. */
@@ -243,29 +247,59 @@ class SurveyRepository(private val surveyDao: SurveyDao) {
 
             val body = payload.toString().toByteArray(Charsets.UTF_8)
 
-            val conn = (URL(APPS_SCRIPT_WEB_APP_URL).openConnection() as HttpURLConnection).apply {
+            var currentConn = (URL(APPS_SCRIPT_WEB_APP_URL).openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
                 doOutput = true
-                instanceFollowRedirects = true // Automatically follows 302 → GET on googleusercontent.com
+                instanceFollowRedirects = false
                 setRequestProperty("Content-Type", "application/json; charset=UTF-8")
                 setRequestProperty("Accept", "application/json")
-                connectTimeout = 20000
-                readTimeout    = 20000
+                connectTimeout = 25000
+                readTimeout    = 25000
             }
 
-            conn.outputStream.use { it.write(body) }
-            val code = conn.responseCode
+            currentConn.outputStream.use { it.write(body) }
+            var code = currentConn.responseCode
+            var location = currentConn.getHeaderField("Location")
+            var redirectCount = 0
+
+            // Follow HTTP redirects (Google Apps Script redirects with 302 to script.googleusercontent.com)
+            while ((code in 300..399) && !location.isNullOrBlank() && redirectCount < 5) {
+                currentConn.disconnect()
+                redirectCount++
+                android.util.Log.d("DCA_POST", "Redirect #$redirectCount (HTTP $code) to $location")
+
+                val nextUrl = URL(location)
+                currentConn = (nextUrl.openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    instanceFollowRedirects = true
+                    setRequestProperty("Accept", "application/json")
+                    connectTimeout = 25000
+                    readTimeout    = 25000
+                }
+                code = currentConn.responseCode
+                location = currentConn.getHeaderField("Location")
+            }
 
             val resp = try {
-                (if (code in 200..299) conn.inputStream else conn.errorStream)
+                (if (code in 200..299) currentConn.inputStream else currentConn.errorStream)
                     ?.bufferedReader()?.readText() ?: ""
             } catch (e: Exception) { "" }
-            conn.disconnect()
+            currentConn.disconnect()
 
-            android.util.Log.d("DCA_POST", "HTTP $code → $resp")
-            code in 200..299
+            android.util.Log.d("DCA_POST", "HTTP $code (after $redirectCount redirects) → $resp")
+
+            if (code in 200..299) {
+                val json = kotlin.runCatching { JSONObject(resp) }.getOrNull()
+                if (json != null) {
+                    if (json.has("success")) json.optBoolean("success", true) else true
+                } else {
+                    true
+                }
+            } else {
+                false
+            }
         } catch (e: Exception) {
-            android.util.Log.e("DCA_POST", "postRecordToAppsScript failed: ${e.message}")
+            android.util.Log.e("DCA_POST", "postRecordToAppsScript failed: ${e.message}", e)
             false
         }
     }
@@ -352,15 +386,32 @@ class SurveyRepository(private val surveyDao: SurveyDao) {
         try {
             var count = 0
             val syncUrl = "$APPS_SCRIPT_WEB_APP_URL?action=getRecords&token=$DCA_SECRET_TOKEN"
-            val conn = (URL(syncUrl).openConnection() as HttpURLConnection).apply {
+            var currentConn = (URL(syncUrl).openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
-                instanceFollowRedirects = true
-                connectTimeout = 15000
-                readTimeout = 15000
+                instanceFollowRedirects = false
+                connectTimeout = 20000
+                readTimeout = 20000
             }
-            val code = conn.responseCode
+            var code = currentConn.responseCode
+            var location = currentConn.getHeaderField("Location")
+            var redirectCount = 0
+
+            while ((code in 300..399) && !location.isNullOrBlank() && redirectCount < 5) {
+                currentConn.disconnect()
+                redirectCount++
+                val nextUrl = URL(location)
+                currentConn = (nextUrl.openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    instanceFollowRedirects = true
+                    connectTimeout = 20000
+                    readTimeout = 20000
+                }
+                code = currentConn.responseCode
+                location = currentConn.getHeaderField("Location")
+            }
+
             if (code in 200..299) {
-                val jsonText = conn.inputStream.bufferedReader().readText()
+                val jsonText = currentConn.inputStream.bufferedReader().readText()
                 val jsonObj = JSONObject(jsonText)
                 if (jsonObj.optBoolean("success")) {
                     val arr = jsonObj.optJSONArray("records")
@@ -385,7 +436,7 @@ class SurveyRepository(private val surveyDao: SurveyDao) {
                     }
                 }
             }
-            conn.disconnect()
+            currentConn.disconnect()
             android.util.Log.d("DCA_SYNC", "fetchRemoteSurveysFromAppsScript fetched $count records")
             count
         } catch (e: Exception) {

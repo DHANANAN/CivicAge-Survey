@@ -22,8 +22,8 @@ object Config {
     // Master password — typing this in Settings switches any session to Master
     const val MASTER_PASSWORD = "SCSCD@2026"
 
-    const val FIREBASE_PROJECT_ID_HINT = "scscdata-51bb8"
-    const val FIREBASE_PROJECT_NUMBER_HINT = "127415575414"
+    const val FIREBASE_PROJECT_ID_HINT = "scsc-data-2026"
+    const val FIREBASE_PROJECT_NUMBER_HINT = "362262887554"
 
     /**
      * 25 Normal user accounts: ID → password

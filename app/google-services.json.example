@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "127415575414",
-    "project_id": "scscdata-51bb8",
-    "storage_bucket": "scscdata-51bb8.firebasestorage.app"
+    "project_number": "362262887554",
+    "project_id": "scsc-data-2026",
+    "storage_bucket": "scsc-data-2026.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:127415575414:android:c98e3e5909d8caea8cd057",
+        "mobilesdk_app_id": "1:362262887554:android:af0e57cfee350bec72c89b",
         "android_client_info": {
           "package_name": "com.scsc.app"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyBPRAwWb5f-jY0tvZhSFe77UDGY676PhwI"
+          "current_key": "YOUR_FIREBASE_API_KEY_HERE"
         }
       ],
       "services": {

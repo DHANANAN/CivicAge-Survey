@@ -1044,7 +1044,7 @@ fun RecordsScreen(viewModel: SurveyViewModel) {
                                 // Student / Surveyor: Submit & Sync to Main SCSC Doc (COMMON_DOC_ID)
                                 viewModel.submitSurveyToMainDoc(s) { success ->
                                     if (success) {
-                                        Toast.makeText(context, "Submitted to Main SCSC Document!", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "Submitted for Master Approval!", Toast.LENGTH_SHORT).show()
                                     } else {
                                         Toast.makeText(context, "Submission failed. Check network.", Toast.LENGTH_SHORT).show()
                                     }

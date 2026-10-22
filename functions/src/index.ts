@@ -8,7 +8,7 @@ admin.initializeApp();
 const db = admin.firestore();
 
 // Environment configuration & deployed Apps Script Web App URL
-const APPS_SCRIPT_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbw-V2Mkj_HVV08L6kjCGGl0HLwJ-z-INEI4XI6tx4N8fO3nGX51-gV20yDpGgECSj4R/exec';
+const APPS_SCRIPT_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxJl6uhLpqFa-QkHuc9GFCrwTKaN_ju9JHbA-sy7O22pRrO9VzOJtsNqI4ZMdsrlyhb/exec';
 const DCA_SECRET_TOKEN = 'DCA_SECRET_TOKEN_2026';
 const ROOT_FOLDER_ID = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID || '';
 const TARGET_DRIVE_OWNER = 'scscpdata@gmail.com';
