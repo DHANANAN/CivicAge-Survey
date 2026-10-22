@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>CivicAge Survey - Smart Cities, Silent Citizens Field Portal</title>
+  <meta name="description" content="Official web-based research and survey data collection portal for the ICSSR Major Research Project (2025-26): Smart Cities, Silent Citizens. Access all 15 instruments with offline drafts, GPS geotagging, voice dictation, and real-time double-doc cloud synchronization.">
+  <meta name="theme-color" content="#0b0f19">
+
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%236366f1'%3E%3Cpath d='M12 2L1 21h22L12 2zm0 3.5L20 19H4l8-13.5z'/%3E%3C/svg%3E">
+
+  <!-- Google Fonts Preconnect -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Top Navigation Bar -->
+    <header class="navbar" role="banner">
+      <div class="nav-brand" onclick="app.navigate('dashboard')" role="button" tabindex="0" aria-label="Go to Dashboard">
+        <div class="nav-logo-icon">🏛️</div>
+        <div class="nav-title">
+          CivicAge Survey
+          <span class="nav-subtitle">ICSSR Project 2025–26</span>
+        </div>
+      </div>
+
+      <!-- Navigation Center / Role Pill -->
+      <div style="display: flex; align-items: center; gap: 0.75rem;">
+        <div id="nav-master-pill" class="master-pill" style="display: none;"></div>
+        <div id="nav-user-info" style="font-size: 0.85rem; display: none;"></div>
+      </div>
+
+      <!-- Navigation Actions -->
+      <nav class="nav-actions" id="nav-actions-container" role="navigation" aria-label="Main Navigation">
+        <button class="btn btn-outline btn-sm" onclick="app.navigate('dashboard')" title="Dashboard">
+          Home
+        </button>
+        <button class="btn btn-outline btn-sm" onclick="app.navigate('instruments')" title="Instruments">
+          Instruments
+        </button>
+        <button class="btn btn-outline btn-sm" onclick="app.navigate('records')" title="Records">
+          Records
+        </button>
+        <button class="btn btn-outline btn-icon" onclick="app.toggleTheme()" title="Toggle Dark/Light Mode" aria-label="Toggle Theme">
+          🌓
+        </button>
+        <button class="btn btn-outline btn-sm" onclick="app.logout()" title="Logout" style="color: #f87171;">
+          Exit
+        </button>
+      </nav>
+    </header>
+
+    <!-- Main Dynamic View Area -->
+    <main class="main-content" id="view-container" role="main">
+      <!-- Dynamic views loaded here via app.js -->
+      <div style="text-align: center; padding: 4rem 1rem;">
+        <div class="nav-logo-icon" style="width: 48px; height: 48px; margin: 0 auto 1rem;">⏳</div>
+        <p style="color: var(--text-muted);">Initializing CivicAge Research Engine...</p>
+      </div>
+    </main>
+
+    <!-- Footer -->
+    <footer style="text-align: center; padding: 1.5rem 1rem; border-top: 1px solid var(--border-glass); color: var(--text-subtle); font-size: 0.75rem;">
+      <p>
+        <strong>Smart Cities, Silent Citizens (ICSSR Major Research Project 2025–2026)</strong><br>
+        Double-Doc Cloud Engine v4.0 Active • Master Central Doc & 12 Field Investigator Google Docs Connected
+      </p>
+    </footer>
+  </div>
+
+  <!-- Toast Notification Anchor -->
+  <div id="toast-container" aria-live="polite"></div>
+
+  <!-- Application Logic Scripts -->
+  <script src="js/config.js?v=4.0"></script>
+  <script src="js/instruments.js?v=4.0"></script>
+  <script src="js/db.js?v=4.0"></script>
+  <script src="js/api.js?v=4.0"></script>
+  <script src="js/app.js?v=4.0"></script>
+
+  <!-- Service Worker Registration for Offline Capabilities -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch((err) => {
+          console.log('ServiceWorker registration skipped (offline fallback enabled via IndexedDB):', err.message);
+        });
+      });
+    }
+  </script>
+</body>
+</html>

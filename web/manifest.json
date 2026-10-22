@@ -1,0 +1,17 @@
+{
+  "name": "CivicAge Survey",
+  "short_name": "CivicAge",
+  "description": "ICSSR Smart Cities Silent Citizens Field Research Portal",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0b0f19",
+  "theme_color": "#6366f1",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%236366f1'%3E%3Cpath d='M12 2L1 21h22L12 2zm0 3.5L20 19H4l8-13.5z'/%3E%3C/svg%3E",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
